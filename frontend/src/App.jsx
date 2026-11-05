@@ -11,6 +11,7 @@ import IncidentsView from "./components/views/IncidentsView";
 import InvestigationsView from "./components/views/InvestigationsView";
 import HindsightMemoryView from "./components/views/HindsightMemoryView";
 import MachinesView from "./components/views/MachinesView";
+import BenchmarkView from "./components/views/BenchmarkView";
 
 import ReportIncidentModal from "./components/modals/ReportIncidentModal";
 import RepairModal from "./components/modals/RepairModal";
@@ -206,6 +207,8 @@ export default function App() {
         return "AI Investigations & Causal Graph";
       case "hindsight-memory":
         return "Hindsight Cloud Memory Bank";
+      case "benchmark":
+        return "Hindsight Learning Benchmark";
       case "machines":
         return "Machinery Fleet Directory";
       default:
@@ -332,6 +335,10 @@ export default function App() {
                   incidents={incidents}
                   systemHealth={systemHealth}
                 />
+              )}
+
+              {activeTab === "benchmark" && (
+                <BenchmarkView />
               )}
 
               {activeTab === "machines" && (

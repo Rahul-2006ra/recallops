@@ -6,6 +6,7 @@ export default function Sidebar({ activeTab, onTabChange, backendHealth }) {
     { id: "incidents", label: "Incidents", icon: "warning" },
     { id: "ai-investigations", label: "AI Investigations", icon: "psychology" },
     { id: "hindsight-memory", label: "Hindsight Memory", icon: "history_toggle_off" },
+    { id: "benchmark", label: "Hindsight Benchmark", icon: "compare_arrows" },
     { id: "machines", label: "Machines", icon: "precision_manufacturing" },
   ];
 

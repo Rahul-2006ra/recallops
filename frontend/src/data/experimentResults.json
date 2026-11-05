@@ -1,0 +1,853 @@
+{
+  "metadata": {
+    "timestamp": "2026-11-05T08:33:36.211789+00:00",
+    "model": "openai/gpt-oss-120b",
+    "baseline_bank": "recallops-exp-baseline",
+    "learned_bank": "recallops-exp-learned",
+    "trials_per_condition": 3,
+    "simulated_incident": {
+      "id": "SIM-EXP-2026-001",
+      "machine_id": "EXP-M-901",
+      "equipment_type": "Industrial Centrifugal Pump",
+      "severity": "HIGH",
+      "symptoms": "High-frequency vibration and casing overheating after 25 minutes of operation",
+      "reported_observations": "Vibration amplitude measured at 7.4 mm/s at pump drive-end bearing housing. Casing surface temperature reached 86\u00b0C after 25 minutes under full load. Cooling grilles and ventilation ducts are clear. Root cause initially unknown.",
+      "is_demo": true
+    }
+  },
+  "condition_a_before": [
+    {
+      "trial": 1,
+      "bank_id": "recallops-exp-baseline",
+      "elapsed_seconds": 4.51,
+      "retrieved_count": 12,
+      "retrieved_memories": [
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (Technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair was verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (Technician) | Suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "Maintenance records for industrial centrifugal pumps experiencing overheating symptoms indicate two distinct outcomes based on the identified root cause:\n\n### Successful Repair\n*   **Machine ID:** DEMO-M-104\n*   **Root Cause:** The issue was identified as restricted airflow, specifically clogged air intake grilles and a blocked ventilation path, which caused heat to become trapped around the motor housing.\n*   **Repair Action:** The technician (TECH-042) cleaned the ventilation path and cleared the clogged air intake grilles. No parts were required for replacement.\n*   **Outcome:** Verified as successful. During a 60-minute full-load inspection, the operating temperature stabilized at 52\u00b0C, and vibration levels were measured at 2.1 mm/s.\n\n### Failed Repair\n*   **Machine ID:** DEMO-M-108\n*   **Root Cause:** Initial diagnostic suspected that drive bearing friction was the primary source of excessive heat generation.\n*   **Repair Action:** The technician (TECH-088) performed a component replacement, specifically installing new motor shaft drive bearings (model SKF-6205-2RSH).\n*   **Outcome:** Verified as unsuccessful. The overheating symptoms recurred after only 28 minutes of operation, reaching a temperature of 89.4\u00b0C. The replacement of the bearings failed to resolve the underlying root cause of the overheating.",
+      "m112_retrieved": false,
+      "m112_cited": false,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": false,
+      "diagnosis_hypothesis": "Based on similar incidents, the high-frequency vibration and rapid casing temperature rise are hypothesized to be caused by restricted airflow to the motor housing (clogged intake grilles or blocked ventilation path), leading to motor overheating and bearing stress.",
+      "confidence": 0.78,
+      "recommended_first_step": "Implement Lockout/Tagout and verify pump is isolated from power and pressure sources.",
+      "recommended_diagnostic_steps": [
+        "Implement Lockout/Tagout and verify pump is isolated from power and pressure sources.",
+        "Wear appropriate thermal and electrical PPE.",
+        "Perform a visual inspection of all ventilation ducts, air intake grilles, and cooling fins for dust, debris, or obstruction.",
+        "Measure airflow rate at the intake using an anemometer and compare to manufacturer specifications.",
+        "Use an infrared thermometer or thermal camera to scan motor housing and bearings for hot spots.",
+        "Conduct a detailed vibration analysis on the drive\u2011end bearing housing to confirm vibration frequency and amplitude.",
+        "If airflow restriction is confirmed, clean/clear the ventilation path and intake grilles per OEM procedure.",
+        "If bearings show abnormal temperature or wear, inspect bearing condition and consider replacement.",
+        "Re\u2011run the pump at full load for at least 30\u202fminutes while continuously monitoring temperature and vibration to verify corrective action."
+      ],
+      "relevant_historical_incidents": [
+        "DEMO-M-104",
+        "DEMO-M-108"
+      ],
+      "supporting_evidence": [
+        "The current pump reached 86\u202f\u00b0C after 25\u202fmin, comparable to DEMO-M-108 which overheated to 89.4\u202f\u00b0C after 28\u202fmin.",
+        "Vibration amplitude of 7.4\u202fmm/s is significantly higher than the 2.1\u202fmm/s recorded after successful airflow cleaning on DEMO\u2011M\u2011104.",
+        "Historical successful repair on DEMO\u2011M\u2011104 involved cleaning ventilation and cleared airflow, resulting in temperature stabilizing at 52\u202f\u00b0C.",
+        "Historical failed repair on DEMO\u2011M\u2011108 involved bearing replacement, which did not resolve overheating, indicating bearing friction may not be primary cause."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Replacement of motor shaft drive bearings (SKF\u20116205\u20112RSH) on DEMO\u2011M\u2011108 did not stop overheating (entries 11,12)."
+      ],
+      "safety_warnings": [
+        "Lockout/Tagout (LOTO) must be applied to the pump motor and any associated hydraulic or pneumatic sources before inspection.",
+        "Allow the pump to depressurize and cool before opening the casing.",
+        "Use thermal-resistant gloves and face shield when approaching hot surfaces.",
+        "Ensure electrical PPE is worn when working on motor connections."
+      ]
+    },
+    {
+      "trial": 2,
+      "bank_id": "recallops-exp-baseline",
+      "elapsed_seconds": 3.07,
+      "retrieved_count": 12,
+      "retrieved_memories": [
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (Technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair was verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (Technician) | Suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "Maintenance records for Industrial Centrifugal Pumps experiencing casing overheating after approximately 30 minutes of operation indicate two distinct repair attempts with differing outcomes. \n\n### Successful Repair\n- **Machine ID:** DEMO-M-104\n- **Reported Issue:** Overheating after 30 minutes of operation, with operator observations noting weak cooling airflow near the motor housing and trapped hot air.\n- **Repair Action:** Technician TECH-042 cleaned the ventilation path and cleared clogged air intake grilles.\n- **Outcome:** Verified as **Successful**. During a 60-minute full load inspection, the temperature stabilized at 52\u00b0C, and vibration levels were measured at 2.1 mm/s.\n- **Root Cause:** Inadequate ventilation and airflow restriction due to clogged intake grilles.\n\n### Failed Repair\n- **Machine ID:** DEMO-M-108\n- **Reported Issue:** High-severity overheating after 30 minutes of operation.\n- **Repair Action:** Technician TECH-088 replaced the motor shaft drive bearings (SKF-6205-2RSH) based on a suspicion that bearing friction was generating excessive heat.\n- **Outcome:** Verified as **Unsuccessful**. The overheating recurred after 28 minutes of operation, reaching a temperature of 89.4\u00b0C. The component replacement failed to address the underlying root cause.\n\nThere is no specific record in the data provided linking 'High-frequency vibration' as a primary reported symptom alongside the overheating; however, the successful repair on machine DEMO-M-104 provided a baseline vibration metric of 2.1 mm/s post-repair.",
+      "m112_retrieved": false,
+      "m112_cited": false,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": false,
+      "diagnosis_hypothesis": "It is hypothesized that restricted airflow in the pump's ventilation path is causing insufficient cooling, leading to casing overheating and elevated vibration levels; bearing friction is considered less likely given the unsuccessful bearing\u2011replacement attempts in similar incidents.",
+      "confidence": 0.78,
+      "recommended_first_step": "Ensure lockout/tagout (LOTO) of the pump and verify isolation before any work.",
+      "recommended_diagnostic_steps": [
+        "Ensure lockout/tagout (LOTO) of the pump and verify isolation before any work.",
+        "Measure airflow at the intake and discharge grilles with an anemometer to confirm adequate ventilation.",
+        "Visually inspect ventilation ducts, intake grilles, and surrounding filters for dust, debris, or obstruction.",
+        "Use an infrared thermometer or thermal camera to record bearing and casing temperatures during a short run.",
+        "Perform a detailed vibration analysis on the drive\u2011end bearing housing to compare with baseline (2.1\u202fmm/s post\u2011repair) values.",
+        "If airflow is adequate, inspect motor shaft drive bearings for wear, lubrication condition, and temperature rise.",
+        "Document all findings and, if a ventilation issue is confirmed, clean/clear the ventilation path and re\u2011test under load."
+      ],
+      "relevant_historical_incidents": [
+        "DEMO-M-104 (successful ventilation cleaning)",
+        "DEMO-M-108 (unsuccessful bearing replacement)"
+      ],
+      "supporting_evidence": [
+        "Current case shows casing temperature 86\u202f\u00b0C after 25\u202fmin under full load, similar to 89.4\u202f\u00b0C after 28\u202fmin in Memory [1]/[2] for DEMO-M-108.",
+        "Vibration amplitude measured at 7.4\u202fmm/s, notably higher than the 2.1\u202fmm/s recorded after successful repair on DEMO-M-104.",
+        "Cooling grilles and ventilation ducts appear clear to the naked eye, but historical successful repair involved deeper cleaning of hidden intake paths (Memory [9]/[10]).",
+        "Memory [11]/[12] documents that bearing replacement did not resolve overheating in a comparable pump (DEMO-M-108)."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) on DEMO-M-108; overheating recurred after 28\u202fmin (Memory [1],[2],[11],[12])."
+      ],
+      "safety_warnings": [
+        "Apply lockout/tagout (LOTO) to isolate electrical and hydraulic power before accessing the pump.",
+        "Wear heat\u2011resistant gloves, safety glasses, and hearing protection during vibration testing.",
+        "Ensure proper ventilation of the work area to avoid heat stress.",
+        "If the pump is pressurized, verify pressure relief devices are functional before opening any casing."
+      ]
+    },
+    {
+      "trial": 3,
+      "bank_id": "recallops-exp-baseline",
+      "elapsed_seconds": 2.74,
+      "retrieved_count": 12,
+      "retrieved_memories": [
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (Technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair was verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair verified successful with temperature returning to 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (Technician) | Suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "For Industrial Centrifugal Pumps exhibiting overheating after approximately 30 minutes of operation, two distinct repair approaches were documented on 2026-11-05, leading to different outcomes based on the identified root cause.\n\n### Successful Repair\n*   **Machine:** DEMO-M-104\n*   **Identified Root Cause:** The root cause was identified as restricted airflow, specifically weak cooling airflow near the motor housing and trapped hot air.\n*   **Repair Action:** Technician TECH-042 cleaned the ventilation path and cleared clogged air intake grilles.\n*   **Outcome:** **Successful**. During a 60-minute full load inspection, the pump temperature returned to a normal level of 52\u00b0C, and vibration levels were verified at 2.1 mm/s.\n\n### Unsuccessful Repair\n*   **Machine:** DEMO-M-108\n*   **Identified Root Cause:** The technician suspected that drive bearing friction was generating excessive heat.\n*   **Repair Action:** Technician TECH-088 replaced the motor shaft drive bearings (specifically model SKF-6205-2RSH).\n*   **Outcome:** **Failed**. The repair did not address the underlying issue. Overheating recurred after 28 minutes of operation, with the casing temperature reaching 89.4\u00b0C, indicating that the component replacement was insufficient to resolve the root cause of the overheating.",
+      "m112_retrieved": false,
+      "m112_cited": false,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": false,
+      "diagnosis_hypothesis": "It is hypothesized that restricted airflow to the pump motor housing is causing insufficient cooling, leading to progressive casing overheating and elevated vibration after ~25 minutes of operation.",
+      "confidence": 0.78,
+      "recommended_first_step": "1. Apply Lockout/Tagout (LOTO) and verify isolation of the pump before any inspection.",
+      "recommended_diagnostic_steps": [
+        "1. Apply Lockout/Tagout (LOTO) and verify isolation of the pump before any inspection.",
+        "2. Allow the pump to cool, then don heat\u2011resistant gloves and appropriate PPE.",
+        "3. Use an anemometer or airflow probe to measure intake airflow at the motor housing and ventilation grilles while the pump runs at low speed.",
+        "4. Visually inspect all ventilation ducts, air intake grilles, and fan blades for dust, debris, or obstruction.",
+        "5. Perform a thermographic scan of the pump casing, motor housing, and bearing housings to locate hot spots and compare temperature gradients.",
+        "6. Record vibration spectra with a handheld analyzer to see if the dominant frequencies correspond to bearing fault signatures or to aerodynamic turbulence.",
+        "7. Measure bearing housing temperature with an infrared thermometer to rule out bearing friction as the primary heat source.",
+        "8. Document any misalignment or shaft run\u2011out using a dial indicator if vibration levels remain high after airflow checks."
+      ],
+      "relevant_historical_incidents": [
+        "DEMO-M-104 (successful airflow\u2011clearance repair)",
+        "DEMO-M-108 (unsuccessful bearing\u2011replacement repair)"
+      ],
+      "supporting_evidence": [
+        "Both the current pump and DEMO-M-108 exhibited overheating after ~28\u201130 minutes, reaching temperatures near 86\u201189\u00b0C.",
+        "Cleaning the ventilation path on DEMO-M-104 reduced temperature to 52\u00b0C and vibration to 2.1 mm/s, confirming airflow restriction as a root cause.",
+        "Replacing motor shaft drive bearings on DEMO-M-108 did not lower temperature, indicating bearing friction was not the primary issue.",
+        "Current observations show clear ventilation grilles, but airflow may still be restricted internally."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Replacement of motor shaft drive bearings (SKF-6205-2RSH) on DEMO-M-108 by TECH-088 \u2013 overheating recurred after 28 minutes."
+      ],
+      "safety_warnings": [
+        "Lockout/Tagout (LOTO) must be applied before accessing the pump.",
+        "Wear heat\u2011resistant gloves and face protection when inspecting hot surfaces.",
+        "Use hearing protection due to high\u2011frequency vibration.",
+        "Ensure proper ventilation; avoid confined space hazards if the pump is in an enclosed area.",
+        "Verify that any electrical connections are de\u2011energized before using diagnostic tools."
+      ]
+    }
+  ],
+  "condition_b_after": [
+    {
+      "trial": 1,
+      "bank_id": "recallops-exp-learned",
+      "elapsed_seconds": 3.16,
+      "retrieved_count": 19,
+      "retrieved_memories": [
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair of pump M-112 stabilized temperature at 48\u00b0C.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair of pump M-112 was successful, reducing vibration from 7.2 mm/s to 1.2 mm/s and stabilizing temperature at 48\u00b0C. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "The repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "The repair of pump M-112 reduced vibration from 7.2 mm/s to 1.2 mm/s.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112 by correcting shaft misalignment and balancing the impeller. | When: 2026-11-05 | Involving: TECH-941",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (technician) | Technician suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "Based on the maintenance history of Industrial Centrifugal Pumps, several interventions have been recorded for symptoms of overheating and high-frequency vibration. The outcomes for these repairs vary depending on the identified root cause and the corrective action taken.\n\n### Summary of Maintenance Outcomes\n\n- **Successful Repairs:**\n  - **Cleaning Ventilation/Airflow:** For a unit experiencing overheating after 30 minutes, cleaning the ventilation path and clearing clogged air intake grilles proved successful. Following this intervention, the pump temperature stabilized at 52\u00b0C during a 60-minute full-load inspection.\n  - **Mechanical Alignment and Balancing:** For a slurry pump exhibiting high-frequency vibration (exceeding 7.2 mm/s) and casing temperature spikes, the successful repair involved correcting shaft misalignment and dynamically balancing the impeller. This reduced vibration to 1.2 mm/s and stabilized the temperature at 48\u00b0C.\n\n- **Unsuccessful Repairs:**\n  - **Bearing Replacement:** An attempt to address overheating by replacing the motor shaft drive bearings (SKF-6205-2RSH) was unsuccessful. The technician initially suspected that drive bearing friction was the root cause, but the issue recurred after 28 minutes of operation, reaching a temperature of 89.4\u00b0C. This indicates that bearing wear was not the primary factor responsible for the overheating symptoms in this instance.\n\n### Root Cause Analysis\n\n- **Confirmed Non-Mechanical Root Causes:** In cases where overheating occurs without high-frequency vibration, the root cause has been linked to restricted airflow caused by clogged intake grilles or ventilation blockages.\n- **Confirmed Mechanical Root Causes:** In cases involving high-frequency vibration, the root cause was identified as mechanical misalignment of the shaft and impeller imbalance, rather than internal bearing friction.\n\nThe maintenance records confirm that treating the vibration and overheating through mechanical alignment and airflow optimization respectively provides a lasting resolution, whereas assuming internal bearing friction based solely on temperature spikes may lead to unsuccessful component replacements.",
+      "m112_retrieved": true,
+      "m112_cited": true,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": true,
+      "diagnosis_hypothesis": "Hypothesis: The high-frequency vibration (7.4\u202fmm/s) and rapid casing temperature rise (86\u202f\u00b0C) are caused by shaft misalignment and/or impeller imbalance rather than bearing wear or airflow restriction.",
+      "confidence": 0.86,
+      "recommended_first_step": "1. Implement Lockout/Tagout (LOTO) and isolate the pump from power and process fluid.",
+      "recommended_diagnostic_steps": [
+        "1. Implement Lockout/Tagout (LOTO) and isolate the pump from power and process fluid.",
+        "2. Perform a full-spectrum vibration analysis on the drive-end and non\u2011drive end bearings using a calibrated accelerometer.",
+        "3. Measure shaft alignment with a laser alignment tool to detect axial or angular misalignment.",
+        "4. Conduct an impeller run\u2011out (balance) test to identify any imbalance.",
+        "5. Use infrared thermography to record bearing and casing temperature trends during a short test run.",
+        "6. Visually inspect ventilation ducts and intake grilles to confirm they remain clear (confirming airflow is not the issue).",
+        "7. Document all findings and compare vibration spectra and temperature data to baseline values before deciding on corrective action."
+      ],
+      "relevant_historical_incidents": [
+        "M-112 (high\u2011frequency vibration and temperature spike, successful alignment & balancing repair)",
+        "DEMO-M-104 (overheating resolved by cleaning ventilation path)",
+        "DEMO-M-108 (overheating after 30\u202fmin, successful after ventilation cleaning)"
+      ],
+      "supporting_evidence": [
+        "Historical pump M-112 exhibited vibration of 7.2\u202fmm/s and temperature spikes; correcting shaft misalignment and balancing the impeller reduced vibration to 1.2\u202fmm/s and stabilized temperature at 48\u202f\u00b0C (entries 10, 14, 15).",
+        "Unsuccessful repair of M-112 involved replacing motor shaft drive bearings (SKF\u20116205\u20112RSH) but overheating recurred after 28\u202fmin at 89.4\u202f\u00b0C, indicating bearing replacement did not address the root cause (entries 2, 3, 18, 19).",
+        "Cleaning ventilation paths successfully resolved overheating in DEMO\u2011M\u2011104 without vibration issues, confirming airflow restriction is a separate failure mode (entries 16, 17).",
+        "Current observations note clear cooling grilles and ventilation ducts, aligning with the mechanical\u2011misalignment failure mode rather than airflow restriction."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Bearing replacement (SKF\u20116205\u20112RSH) on pump M-112 did not prevent overheating (entries 2, 3, 18, 19)."
+      ],
+      "safety_warnings": [
+        "Lockout/Tagout (LOTO) the pump and associated drive before any inspection or testing.",
+        "Wear heat\u2011resistant gloves and face shield due to casing temperatures exceeding 80\u202f\u00b0C.",
+        "Use hearing protection when performing vibration measurements.",
+        "Ensure pressure relief valves are set and vented before starting the pump for test runs.",
+        "Verify that all electrical connections are de\u2011energized before using alignment tools."
+      ]
+    },
+    {
+      "trial": 2,
+      "bank_id": "recallops-exp-learned",
+      "elapsed_seconds": 3.54,
+      "retrieved_count": 19,
+      "retrieved_memories": [
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair of pump M-112 stabilized temperature at 48\u00b0C.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair of pump M-112 was successful, reducing vibration from 7.2 mm/s to 1.2 mm/s and stabilizing temperature at 48\u00b0C. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "The repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair of pump M-112 reduced vibration from 7.2 mm/s to 1.2 mm/s.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112 by correcting shaft misalignment and balancing the impeller. | When: 2026-11-05 | Involving: TECH-941",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (technician) | Technician suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "Maintenance records for industrial centrifugal pumps experiencing overheating and high-frequency vibration reveal distinct repair outcomes based on the identified root causes. \n\n### Successful Repairs\n\n- **Ventilation Issues (Machine DEMO-M-104):**\n  - **Symptoms:** Overheating after 30 minutes of operation.\n  - **Root Cause:** Clogged air intake grilles restricting airflow to the motor.\n  - **Repair Action:** Cleaning the ventilation path and clearing the intake grilles.\n  - **Outcome:** Successful. The pump temperature stabilized at 52\u00b0C during a 60-minute full load inspection.\n\n- **Mechanical Misalignment and Imbalance (Machine M-112):**\n  - **Symptoms:** High-frequency vibration (exceeding 7.2 mm/s) and casing temperature spikes.\n  - **Root Cause:** Shaft misalignment and an unbalanced pump impeller.\n  - **Repair Action:** Correcting the shaft misalignment and dynamically balancing the pump impeller.\n  - **Outcome:** Successful. Vibration levels were reduced from 7.2 mm/s to 1.2 mm/s, and the operating temperature stabilized at 48\u00b0C.\n\n### Failed Repairs\n\n- **Bearing Friction (Machine DEMO-M-108):**\n  - **Symptoms:** Overheating after 30 minutes of operation.\n  - **Root Cause (Suspected):** Drive bearing friction.\n  - **Repair Action:** Replacement of the motor shaft drive bearings (SKF-6205-2RSH).\n  - **Outcome:** Unsuccessful. The overheating recurred after 28 minutes of operation, reaching 89.4\u00b0C, indicating that the bearing replacement failed to address the actual root cause of the heat generation.",
+      "m112_retrieved": true,
+      "m112_cited": true,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": true,
+      "diagnosis_hypothesis": "Based on the similarity to historical incident M-112, the high-frequency vibration (7.4\u202fmm/s) and rapid casing temperature rise (86\u202f\u00b0C) suggest a likely combination of shaft misalignment and impeller imbalance rather than ventilation blockage or bearing friction.",
+      "confidence": 0.78,
+      "recommended_first_step": "Apply Lockout/Tagout (LOTO) to isolate electrical and hydraulic power to the pump.",
+      "recommended_diagnostic_steps": [
+        "Apply Lockout/Tagout (LOTO) to isolate electrical and hydraulic power to the pump.",
+        "Allow the pump to cool, then don thermal\u2011resistant gloves and eye protection before any physical inspection.",
+        "Perform a detailed shaft alignment check using a laser alignment tool or dial indicator on both pump and driver shafts.",
+        "Conduct a full spectrum vibration analysis at the drive end bearing housing to differentiate between imbalance (dominant 1X frequency) and misalignment (2X frequency).",
+        "Visually inspect the impeller for signs of wear or damage and, if accessible, run a dynamic balancing test.",
+        "Measure bearing temperatures and check lubrication condition to rule out bearing friction.",
+        "Verify actual airflow through the ventilation path with an anemometer, even though grilles appear clear."
+      ],
+      "relevant_historical_incidents": [
+        "M-112",
+        "DEMO-M-104",
+        "DEMO-M-108"
+      ],
+      "supporting_evidence": [
+        "Historical incident M-112 reported high-frequency vibration (7.2\u202fmm/s) and casing temperature spikes, resolved successfully by correcting shaft misalignment and balancing the impeller (entries 15, 14).",
+        "Ventilation cleaning on DEMO-M-104 successfully stabilized temperature at 52\u202f\u00b0C, confirming that clear airflow can resolve overheating when it is the root cause (entries 16, 17).",
+        "Bearing replacement on DEMO-M-108 (SKF-6205-2RSH) did not stop overheating, indicating that bearing friction was not the primary cause in similar symptom sets (entries 18, 19)."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Replacement of motor shaft drive bearings (SKF-6205-2RSH) on DEMO-M-108 did not prevent temperature reaching 89.4\u202f\u00b0C after 28\u202fmin (entries 18, 19)."
+      ],
+      "safety_warnings": [
+        "Lockout/Tagout (LOTO) must be applied before any inspection or maintenance.",
+        "Wear heat\u2011resistant gloves and face shield due to casing temperatures exceeding 80\u202f\u00b0C.",
+        "Ensure proper ventilation and avoid confined space entry without atmospheric testing.",
+        "Verify that the pump is depressurized and motor is isolated to prevent accidental start\u2011up."
+      ]
+    },
+    {
+      "trial": 3,
+      "bank_id": "recallops-exp-learned",
+      "elapsed_seconds": 15.58,
+      "retrieved_count": 19,
+      "retrieved_memories": [
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Repair attempt was unsuccessful; overheating recurred after 28 minutes of operation with a temperature of 89.4 degrees Celsius. | When: 2026-11-05 | Component replacement failed to solve the root cause.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Centrifugal Slurry Pump M-112 experienced high-frequency vibration and casing temperature spike.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair attempt was unsuccessful; overheating recurred after 28 minutes of operation at 89.4 degrees Celsius.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation. | When: 2026-11-05 | Involving: TECH-088 (technician)",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-108) experienced high-severity overheating after 30 minutes of operation.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Industrial Centrifugal Pump (Machine ID: DEMO-M-104) experienced overheating after 30 minutes of operation on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair of pump M-112 stabilized temperature at 48\u00b0C.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair of pump M-112 was successful, reducing vibration from 7.2 mm/s to 1.2 mm/s and stabilizing temperature at 48\u00b0C. | When: 2026-11-05",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "The repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Repair was successful, with the pump temperature stabilizing at 52\u00b0C during a 60-minute full load inspection. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "The repair of pump M-112 reduced vibration from 7.2 mm/s to 1.2 mm/s.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-941 repaired pump M-112 by correcting shaft misalignment and balancing the impeller. | When: 2026-11-05 | Involving: TECH-941",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-INC-20261105-CF6B1D"
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles on 2026-11-05.",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-042 repaired the pump by cleaning the ventilation path and clearing clogged air intake grilles. | When: 2026-11-05 | Involving: TECH-042",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-104"
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH).",
+          "score": null,
+          "timestamp": "",
+          "document_id": null
+        },
+        {
+          "text": "Technician TECH-088 replaced motor shaft drive bearings (SKF-6205-2RSH) to address suspected friction. | When: 2026-11-05 | Involving: TECH-088 (technician) | Technician suspected drive bearing friction was generating excessive heat.",
+          "score": null,
+          "timestamp": "",
+          "document_id": "OUTCOME-DEMO-M-108"
+        }
+      ],
+      "reflect_summary": "Based on the maintenance records for industrial centrifugal pumps exhibiting high-frequency vibration and casing overheating, several repair attempts have been documented, each with varying degrees of success depending on the root cause identified.\n\n### Summary of Repairs and Outcomes\n\n*   **Successful Repairs:**\n    *   **Ventilation and Airflow Issues:** For machines where overheating was caused by restricted airflow, cleaning the ventilation path and clearing clogged air intake grilles proved successful. This intervention restored the pump to normal operation, with temperatures stabilizing at 52\u00b0C during full-load inspections.\n    *   **Mechanical Misalignment and Imbalance:** For pumps (such as M-112) experiencing both high-frequency vibration (measured at 7.2 mm/s) and temperature spikes, correcting the shaft misalignment and dynamically balancing the impeller was a successful repair. This action reduced vibration levels significantly to 1.2 mm/s and stabilized operating temperatures at 48\u00b0C.\n\n*   **Unsuccessful Repairs:**\n    *   **Bearing Replacement:** Attempting to address overheating through the replacement of motor shaft drive bearings (specifically SKF-6205-2RSH bearings) was documented as an unsuccessful repair. In this instance, the technician suspected bearing friction as the root cause, but the overheating symptoms recurred after only 28 minutes of operation, reaching a temperature of 89.4\u00b0C. This indicates that bearing friction was not the primary root cause in that scenario.",
+      "m112_retrieved": true,
+      "m112_cited": true,
+      "m108_avoided": true,
+      "coupling_or_balance_prioritized": true,
+      "diagnosis_hypothesis": "The high-frequency vibration (\u22487.4\u202fmm/s) combined with rapid casing temperature rise suggests shaft misalignment and/or impeller imbalance as the primary root cause; airflow restriction appears unlikely because ventilation grilles are clear.",
+      "confidence": 0.78,
+      "recommended_first_step": "Apply Lockout/Tagout (LOTO) and isolate electrical and hydraulic power to the pump; verify zero energy state.",
+      "recommended_diagnostic_steps": [
+        "Apply Lockout/Tagout (LOTO) and isolate electrical and hydraulic power to the pump; verify zero energy state.",
+        "Wear thermal PPE and hearing protection before approaching the pump.",
+        "Record baseline vibration spectra at the drive-end and non\u2011drive-end bearings using a calibrated vibration analyzer.",
+        "Perform a laser shaft\u2011alignment check on the motor\u2011pump coupling; compare measured offset and angular misalignment to manufacturer tolerances.",
+        "Measure impeller run\u2011out on the shaft to assess imbalance; if run\u2011out exceeds limits, schedule dynamic balancing.",
+        "Inspect motor shaft drive bearings (SKF\u20116205\u20112RSH) for temperature, wear, and lubrication condition.",
+        "Re\u2011confirm that all ventilation ducts and air intake grilles remain unobstructed; document airflow rate.",
+        "Document findings and, if misalignment or imbalance is confirmed, plan corrective action (realignment, balancing, or both) before re\u2011energizing the pump."
+      ],
+      "relevant_historical_incidents": [
+        "M-112 (high\u2011frequency vibration and casing temperature spike)",
+        "DEMO-M-104 (overheating after 30\u202fmin, successful ventilation cleaning)",
+        "DEMO-M-108 (overheating after 30\u202fmin, successful ventilation cleaning)"
+      ],
+      "supporting_evidence": [
+        "Current vibration amplitude (7.4\u202fmm/s) matches the 7.2\u202fmm/s recorded for pump M\u2011112 where misalignment/impeller imbalance was the root cause.",
+        "Casing temperature reached 86\u202f\u00b0C after 25\u202fmin, comparable to the 89.4\u202f\u00b0C spike in M\u2011112 when the incorrect bearing\u2011replacement repair was performed.",
+        "Ventilation grilles are reported clear, eliminating the airflow\u2011restriction failure mode that was successful in other incidents.",
+        "Historical repair of M\u2011112 that corrected shaft misalignment and balanced the impeller reduced vibration to 1.2\u202fmm/s and stabilized temperature at 48\u202f\u00b0C."
+      ],
+      "unsuccessful_previous_repairs": [
+        "Replacement of motor shaft drive bearings (SKF\u20116205\u20112RSH) \u2013 overheating recurred after 28\u202fmin at 89.4\u202f\u00b0C (unsuccessful)."
+      ],
+      "safety_warnings": [
+        "Lockout/Tagout (LOTO) must be applied to motor, drive, and any hydraulic/pneumatic sources before inspection.",
+        "Wear thermal-resistant gloves and face shield due to elevated casing temperature.",
+        "Use hearing protection when measuring vibration.",
+        "Ensure proper ventilation to avoid buildup of hot gases; maintain clear escape routes.",
+        "Verify that the pump is depressurized and any residual fluid is safely drained before disassembly."
+      ]
+    }
+  ]
+}
