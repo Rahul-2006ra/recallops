@@ -1,0 +1,13 @@
+[
+  {
+    "asset_id": "PUMP-HT-04",
+    "timestamp": "2026-11-01T08:30:00Z",
+    "sensor_metrics": {
+      "temperature_celsius": 88.5,
+      "vibration_rms_mm_s": 7.4,
+      "discharge_pressure_bar": 12.1
+    },
+    "alert_level": "WARNING",
+    "notes": "Bearing temperature rising above baseline threshold."
+  }
+]
