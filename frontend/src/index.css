@@ -6,8 +6,8 @@
   html, body {
     margin: 0;
     padding: 0;
-    background-color: #F8FAFC;
-    color: #0f172a;
+    background-color: #0d1322;
+    color: #dde2f7;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     overscroll-behavior: none;
   }
@@ -21,13 +21,16 @@
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #242a3a;
   border-radius: 4px;
 }
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4a45;
+}
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #080e1d;
 }

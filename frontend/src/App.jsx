@@ -1,22 +1,21 @@
 import React, { useState, useEffect, useCallback } from "react";
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
-import HeroBanner from "./components/HeroBanner";
-import StatsGrid from "./components/StatsGrid";
-import HindsightMemoryCenterpiece from "./components/HindsightMemoryCenterpiece";
-import IncidentsTable from "./components/IncidentsTable";
-import VerificationProtocolCard from "./components/VerificationProtocolCard";
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
-import IncidentsView from "./components/views/IncidentsView";
-import InvestigationsView from "./components/views/InvestigationsView";
+// Six Stitch Views
+import HomeView from "./components/views/HomeView";
+import InvestigationResultsView from "./components/views/InvestigationResultsView";
 import HindsightMemoryView from "./components/views/HindsightMemoryView";
-import MachinesView from "./components/views/MachinesView";
 import BenchmarkView from "./components/views/BenchmarkView";
+import IncidentsView from "./components/views/IncidentsView";
+import MachinesView from "./components/views/MachinesView";
 
+// Modals
 import ReportIncidentModal from "./components/modals/ReportIncidentModal";
 import RepairModal from "./components/modals/RepairModal";
 import VerifyOutcomeModal from "./components/modals/VerifyOutcomeModal";
 
+// Backend API Client
 import {
   listIncidents,
   getIncidentDetails,
@@ -56,6 +55,7 @@ export default function App() {
 
   // Fetch full incident details
   const loadIncidentDetails = useCallback(async (incidentId) => {
+    if (!incidentId) return;
     setIsLoadingDetails(true);
     try {
       const details = await getIncidentDetails(incidentId);
@@ -69,33 +69,36 @@ export default function App() {
   }, []);
 
   // Fetch all incidents
-  const fetchAllIncidents = useCallback(async (preferredSelectId = null) => {
-    try {
-      const data = await listIncidents();
-      setIncidents(data);
+  const fetchAllIncidents = useCallback(
+    async (preferredSelectId = null) => {
+      try {
+        const data = await listIncidents();
+        setIncidents(data);
 
-      if (data.length > 0) {
-        let toSelect = null;
-        if (preferredSelectId) {
-          toSelect = data.find((i) => i.id === preferredSelectId);
+        if (data.length > 0) {
+          let toSelect = null;
+          if (preferredSelectId) {
+            toSelect = data.find((i) => i.id === preferredSelectId);
+          }
+          if (!toSelect) {
+            // Default to M-112 or first investigated incident for dramatic demo centerpiece
+            toSelect =
+              data.find((i) => i.machine_id === "M-112") ||
+              data.find((i) => i.status !== "REPORTED") ||
+              data[0];
+          }
+          setSelectedIncident(toSelect);
+          loadIncidentDetails(toSelect.id);
         }
-        if (!toSelect) {
-          // Default to M-112 or first investigated incident for dramatic demo centerpiece
-          toSelect =
-            data.find((i) => i.machine_id === "M-112") ||
-            data.find((i) => i.status !== "REPORTED") ||
-            data[0];
-        }
-        setSelectedIncident(toSelect);
-        loadIncidentDetails(toSelect.id);
+      } catch (err) {
+        console.error("Failed to fetch incidents:", err);
+        showToast("Could not connect to RecallOps backend.", "error");
+      } finally {
+        setIsLoadingIncidents(false);
       }
-    } catch (err) {
-      console.error("Failed to fetch incidents:", err);
-      showToast("Could not connect to RecallOps backend.", "error");
-    } finally {
-      setIsLoadingIncidents(false);
-    }
-  }, [loadIncidentDetails]);
+    },
+    [loadIncidentDetails]
+  );
 
   // Initial load
   useEffect(() => {
@@ -106,7 +109,7 @@ export default function App() {
     fetchAllIncidents();
   }, [fetchAllIncidents]);
 
-  // When user selects an incident row or card
+  // When user selects an incident
   const handleSelectIncident = (incidentOrId) => {
     let incident = null;
     let incidentId = null;
@@ -125,13 +128,6 @@ export default function App() {
     if (incidentId) {
       loadIncidentDetails(incidentId);
     }
-  };
-
-  // When user clicks Open Investigation in table
-  const handleOpenInvestigation = (incidentOrId) => {
-    handleSelectIncident(incidentOrId);
-    // Smoothly scroll to the Centerpiece so the technician immediately sees the diagnostic panel
-    window.scrollTo({ top: 120, behavior: "smooth" });
   };
 
   // Run AI investigation
@@ -167,6 +163,24 @@ export default function App() {
     }
   };
 
+  // Start Investigation from Homepage prompt input
+  const handleStartInvestigationFromHome = async (formData) => {
+    try {
+      const created = await createIncident(formData);
+      showToast(`Incident ${created.id} registered. Running autonomous AI investigation...`, "success");
+      await fetchAllIncidents(created.id);
+      setSelectedIncident(created);
+      setActiveTab("ai-investigations");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      // Trigger actual AI investigation immediately
+      await handleInvestigate(created.id);
+    } catch (err) {
+      console.error("Start investigation error:", err);
+      showToast("Failed to initiate investigation.", "error");
+    }
+  };
+
   // Open modals
   const handleOpenRepair = (incident) => {
     setModalTargetIncident(incident || selectedIncident);
@@ -183,53 +197,38 @@ export default function App() {
     const created = await createIncident(formData);
     showToast(`Incident ${created.id} registered successfully!`, "success");
     await fetchAllIncidents(created.id);
+    setSelectedIncident(created);
+    setActiveTab("ai-investigations");
   };
 
   const handleRepairSubmit = async (incidentId, payload) => {
     await logRepair(incidentId, payload);
     showToast("Physical repair action logged into audit history.", "success");
     await fetchAllIncidents(incidentId);
+    await loadIncidentDetails(incidentId);
   };
 
   const handleVerifySubmit = async (incidentId, payload) => {
     await verifyOutcome(incidentId, payload);
     showToast("Outcome verified & episodic memory retained in Hindsight Cloud!", "success");
     await fetchAllIncidents(incidentId);
-  };
-
-  const getTabTitle = () => {
-    switch (activeTab) {
-      case "overview":
-        return "Live Diagnostic Overview";
-      case "incidents":
-        return "Active Incidents & Audit Registry";
-      case "ai-investigations":
-        return "AI Investigations & Causal Graph";
-      case "hindsight-memory":
-        return "Hindsight Cloud Memory Bank";
-      case "benchmark":
-        return "Hindsight Learning Benchmark";
-      case "machines":
-        return "Machinery Fleet Directory";
-      default:
-        return "Overview";
-    }
+    await loadIncidentDetails(incidentId);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex font-sans antialiased">
+    <div className="min-h-screen bg-surface text-on-surface flex flex-col font-body antialiased">
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg shadow-xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200 ${
+          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg shadow-2xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200 ${
             toast.type === "success"
-              ? "bg-slate-900 text-white border-emerald-500/50"
-              : "bg-rose-900 text-white border-rose-500/50"
+              ? "bg-surface-container-high text-on-surface border-primary-container/40 shadow-[0_0_16px_rgba(13,242,200,0.25)]"
+              : "bg-surface-container-high text-error border-error/40 shadow-[0_0_16px_rgba(244,63,94,0.25)]"
           }`}
         >
           <span
             className={`material-symbols-outlined text-[18px] ${
-              toast.type === "success" ? "text-emerald-400" : "text-rose-400"
+              toast.type === "success" ? "text-primary-container" : "text-error"
             }`}
           >
             {toast.type === "success" ? "check_circle" : "error"}
@@ -238,122 +237,117 @@ export default function App() {
         </div>
       )}
 
-      {/* Persistent Navy Sidebar */}
-      <Sidebar
+      {/* Persistent Top Navbar (Tactile Industrial Memory) */}
+      <Navbar
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         backendHealth={systemHealth}
+        onOpenReportModal={() => setIsReportModalOpen(true)}
       />
 
-      {/* Main Content Pane */}
-      <div className="ml-60 flex-1 flex flex-col min-w-0">
-        {/* Top Sticky Header */}
-        <Header activeTabLabel={getTabTitle()} />
+      {/* Main Content Workspace */}
+      <main className="w-full pt-16 flex-1 min-h-[calc(100vh-64px)] flex flex-col">
+        {isLoadingIncidents && incidents.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-16 gap-3 text-on-surface-variant">
+            <span className="material-symbols-outlined text-[36px] animate-spin text-primary-container">
+              sync
+            </span>
+            <span className="text-xs font-mono font-semibold tracking-wider">
+              CONNECTING TO RECALLOPS DIAGNOSTIC ENGINE...
+            </span>
+          </div>
+        ) : (
+          <>
+            {/* Screen 1: Homepage */}
+            {activeTab === "overview" && (
+              <HomeView
+                incidents={incidents}
+                onStartInvestigation={handleStartInvestigationFromHome}
+                onOpenReportModal={() => setIsReportModalOpen(true)}
+                onNavigateTab={(tab) => {
+                  setActiveTab(tab);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onSelectIncident={(inc) => {
+                  handleSelectIncident(inc);
+                  setActiveTab("ai-investigations");
+                }}
+              />
+            )}
 
-        {/* Dynamic Workspace Container */}
-        <main className="p-4 sm:p-5 flex flex-col gap-3.5 max-w-[1600px] w-full mx-auto">
-          {isLoadingIncidents && incidents.length === 0 ? (
-            <div className="p-16 flex flex-col items-center justify-center gap-3 text-slate-400">
-              <span className="material-symbols-outlined text-[36px] animate-spin text-blue-600">
-                sync
-              </span>
-              <span className="text-xs font-semibold">
-                Connecting to RecallOps Intelligence Engine...
-              </span>
-            </div>
-          ) : (
-            <>
-              {activeTab === "overview" && (
-                <>
-                  {/* Hero Banner */}
-                  <HeroBanner
-                    onReportClick={() => setIsReportModalOpen(true)}
-                    onActiveInvestigationsClick={() => setActiveTab("ai-investigations")}
-                  />
+            {/* Screen 2: Investigation Results */}
+            {activeTab === "ai-investigations" && (
+              <InvestigationResultsView
+                selectedIncident={selectedIncident}
+                incidentDetails={incidentDetails}
+                isLoadingDetails={isLoadingDetails}
+                isInvestigating={isInvestigating}
+                onInvestigateClick={handleInvestigate}
+                onOpenRepairModal={handleOpenRepair}
+                onOpenVerifyModal={handleOpenVerify}
+                allIncidents={incidents}
+                onSelectIncident={handleSelectIncident}
+              />
+            )}
 
-                  {/* Operational Metrics Grid */}
-                  <StatsGrid incidents={incidents} />
+            {/* Screen 3: Learning Benchmark */}
+            {activeTab === "learning-benchmark" && (
+              <BenchmarkView />
+            )}
 
-                  {/* 3-Column Hindsight Episodic Centerpiece */}
-                  <HindsightMemoryCenterpiece
-                    selectedIncident={selectedIncident}
-                    incidentDetails={incidentDetails}
-                    isLoadingDetails={isLoadingDetails}
-                    isInvestigating={isInvestigating}
-                    onInvestigateClick={() => handleInvestigate(selectedIncident?.id)}
-                    onRepairClick={() => handleOpenRepair(selectedIncident)}
-                    onVerifyClick={() => handleOpenVerify(selectedIncident)}
-                    allIncidents={incidents}
-                  />
+            {/* Screen 4: Hindsight Memory */}
+            {activeTab === "hindsight-memory" && (
+              <HindsightMemoryView
+                incidents={incidents}
+                systemHealth={systemHealth}
+              />
+            )}
 
-                  {/* Active Incidents Table (8 cols) + Verification Protocol (4 cols) */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-                    <div className="lg:col-span-8">
-                      <IncidentsTable
-                        incidents={incidents}
-                        selectedIncidentId={selectedIncident?.id}
-                        onSelectIncident={handleSelectIncident}
-                        onOpenInvestigation={handleOpenInvestigation}
-                        onViewAllClick={() => setActiveTab("incidents")}
-                      />
-                    </div>
-                    <div className="lg:col-span-4">
-                      <VerificationProtocolCard systemHealth={systemHealth} />
-                    </div>
-                  </div>
-                </>
-              )}
+            {/* Screen 5: Incidents */}
+            {activeTab === "incidents" && (
+              <IncidentsView
+                incidents={incidents}
+                onSelectIncident={(inc) => {
+                  handleSelectIncident(inc);
+                  setActiveTab("ai-investigations");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onOpenReportModal={() => setIsReportModalOpen(true)}
+                onOpenInvestigation={(inc) => {
+                  handleSelectIncident(inc);
+                  setActiveTab("ai-investigations");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onOpenRepairModal={handleOpenRepair}
+                onOpenVerifyModal={handleOpenVerify}
+              />
+            )}
 
-              {activeTab === "incidents" && (
-                <IncidentsView
-                  incidents={incidents}
-                  onSelectIncident={(inc) => {
-                    handleSelectIncident(inc);
-                    setActiveTab("overview");
-                  }}
-                  onOpenReportModal={() => setIsReportModalOpen(true)}
-                  onOpenInvestigation={handleInvestigate}
-                  onOpenRepairModal={handleOpenRepair}
-                  onOpenVerifyModal={handleOpenVerify}
-                />
-              )}
+            {/* Screen 6: Machines */}
+            {activeTab === "machines" && (
+              <MachinesView
+                incidents={incidents}
+                onSelectIncident={(inc) => {
+                  handleSelectIncident(inc);
+                  setActiveTab("ai-investigations");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onOpenReportModal={() => setIsReportModalOpen(true)}
+                onNavigateTab={(tab) => {
+                  setActiveTab(tab);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              />
+            )}
+          </>
+        )}
+      </main>
 
-              {activeTab === "ai-investigations" && (
-                <InvestigationsView
-                  incidents={incidents}
-                  onSelectIncident={handleSelectIncident}
-                  onOpenRepairModal={handleOpenRepair}
-                  onOpenInvestigation={handleInvestigate}
-                />
-              )}
-
-              {activeTab === "hindsight-memory" && (
-                <HindsightMemoryView
-                  incidents={incidents}
-                  systemHealth={systemHealth}
-                />
-              )}
-
-              {activeTab === "benchmark" && (
-                <BenchmarkView />
-              )}
-
-              {activeTab === "machines" && (
-                <MachinesView
-                  incidents={incidents}
-                  onSelectIncident={(inc) => {
-                    handleSelectIncident(inc);
-                    setActiveTab("overview");
-                  }}
-                />
-              )}
-            </>
-          )}
-        </main>
-      </div>
+      {/* Persistent Industrial Footer */}
+      <Footer backendHealth={systemHealth} />
 
       {/* Interactive Lifecycle Action Modals */}
       <ReportIncidentModal
