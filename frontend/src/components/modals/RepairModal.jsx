@@ -14,6 +14,15 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.technician_id.trim()) {
+      setError("Technician ID is required for audit traceability.");
+      return;
+    }
+    if (!formData.action_taken.trim()) {
+      setError("Action Taken description is required.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -21,7 +30,8 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
       await onSubmitSuccess(incident.id, formData);
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message || "Failed to log repair action");
+      // Keep entered form data intact
+      setError(err?.response?.data?.detail || err.message || "Failed to log physical repair action");
     } finally {
       setLoading(false);
     }
@@ -32,7 +42,7 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
       <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded bg-amber-500/30 border border-amber-400/40 flex items-center justify-center text-amber-300">
               <span className="material-symbols-outlined text-[18px]">build</span>
             </div>
@@ -47,52 +57,58 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
           </div>
           <button
             onClick={onClose}
+            disabled={loading}
             type="button"
-            className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+            className="text-slate-400 hover:text-white p-1 rounded transition-colors disabled:opacity-50 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-3.5">
           {error && (
-            <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[16px]">error</span>
-              <span>{error}</span>
+            <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] text-rose-600 mt-0.5 shrink-0">error</span>
+              <span className="leading-snug">{error}</span>
             </div>
           )}
 
-          <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700">
-            <span className="font-bold text-slate-900">Incident Symptoms: </span>
-            {incident.symptoms}
+          {/* Context box */}
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700 flex flex-col gap-1">
+            <div>
+              <span className="font-bold text-slate-900">Equipment / Symptoms: </span>
+              {incident.equipment_type} — {incident.symptoms}
+            </div>
           </div>
 
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Technician ID <span className="text-rose-500">*</span>
+              Executing Technician ID <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
+              disabled={loading}
               value={formData.technician_id}
               onChange={(e) => setFormData({ ...formData, technician_id: e.target.value })}
               placeholder="e.g. TECH-941"
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none"
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none disabled:opacity-60"
             />
           </div>
 
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Action Taken <span className="text-rose-500">*</span>
+              Physical Action Taken <span className="text-rose-500">*</span>
             </label>
             <textarea
               rows={2}
               required
+              disabled={loading}
               value={formData.action_taken}
               onChange={(e) => setFormData({ ...formData, action_taken: e.target.value })}
-              placeholder="Describe exact physical repair or maintenance performed..."
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none resize-none"
+              placeholder="Describe exact physical repair, alignment, part replacement, or maintenance executed..."
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none resize-none disabled:opacity-60"
             />
           </div>
 
@@ -102,23 +118,25 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
             </label>
             <input
               type="text"
+              disabled={loading}
               value={formData.parts_replaced}
               onChange={(e) => setFormData({ ...formData, parts_replaced: e.target.value })}
-              placeholder="e.g. Dynamic Seal Cartridge, Oil Filter"
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none"
+              placeholder="e.g. Dynamic Seal Cartridge, SKF Bearing 6205"
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none disabled:opacity-60"
             />
           </div>
 
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Technician Notes (Optional)
+              Technician Remarks &amp; Specifications (Optional)
             </label>
             <textarea
               rows={2}
+              disabled={loading}
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Torque specifications, sensor baseline readings, etc."
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none resize-none"
+              placeholder="Torque specifications, lubricant grade, laser-alignment readings..."
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-900 font-medium focus:bg-white focus:border-blue-500 outline-none resize-none disabled:opacity-60"
             />
           </div>
 
@@ -127,24 +145,24 @@ export default function RepairModal({ isOpen, incident, onClose, onSubmitSuccess
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-3 py-1.5 rounded border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              className="px-3 py-1.5 rounded border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+              className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? (
                 <>
                   <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
-                  <span>Saving Repair...</span>
+                  <span>Saving Action...</span>
                 </>
               ) : (
                 <>
                   <span className="material-symbols-outlined text-[14px]">save</span>
-                  <span>Log Repair</span>
+                  <span>Log Repair Action</span>
                 </>
               )}
             </button>

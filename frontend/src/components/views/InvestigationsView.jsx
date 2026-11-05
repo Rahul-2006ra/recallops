@@ -129,9 +129,12 @@ export default function InvestigationsView({ incidents, onSelectIncident, onOpen
                         <span className="material-symbols-outlined text-[16px]">psychology</span>
                         <span>AI Diagnostic Hypothesis</span>
                       </div>
-                      <div className="flex items-center gap-1 bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-bold">
-                        <span>Confidence:</span>
-                        <span>{Math.round(currentInvestigation.confidence * 100)}%</span>
+                      <div className="flex items-center gap-1 bg-blue-100 text-blue-900 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                        <span>
+                          {typeof currentInvestigation.confidence === "number"
+                            ? `AI-estimated confidence: ${Math.round(currentInvestigation.confidence * 100)}% — Not statistically calibrated`
+                            : "Confidence not available"}
+                        </span>
                       </div>
                     </div>
                     <p className="text-sm font-semibold text-slate-900 leading-relaxed">

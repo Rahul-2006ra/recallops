@@ -5,10 +5,29 @@ export default function IncidentsTable({
   selectedIncidentId,
   onSelectIncident,
   onOpenInvestigation,
+  onViewAllClick,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const PAGE_SIZE = 6;
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleSeverityChange = (e) => {
+    setSeverityFilter(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusChange = (e) => {
+    setStatusFilter(e.target.value);
+    setCurrentPage(1);
+  };
 
   const filteredIncidents = incidents.filter((inc) => {
     const matchesSearch =
@@ -25,6 +44,12 @@ export default function IncidentsTable({
 
     return matchesSearch && matchesSeverity && matchesStatus;
   });
+
+  const totalPages = Math.ceil(filteredIncidents.length / PAGE_SIZE) || 1;
+  const paginatedIncidents = filteredIncidents.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   const getSeverityBadge = (severity) => {
     switch (severity) {
@@ -87,19 +112,19 @@ export default function IncidentsTable({
             Active Incidents
           </h2>
           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-            {incidents.length} Records
+            {filteredIncidents.length} Records
           </span>
         </div>
 
         {/* Search & Filter Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative w-44">
+          <div className="relative w-40 sm:w-44">
             <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[15px]">
               search
             </span>
             <input
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="w-full pl-7 pr-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium text-slate-900 placeholder:text-slate-400 outline-none focus:bg-white focus:border-blue-500"
               placeholder="Filter machine or ID..."
               type="text"
@@ -109,8 +134,8 @@ export default function IncidentsTable({
           <div className="relative">
             <select
               value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium text-slate-700 outline-none cursor-pointer focus:bg-white focus:border-blue-500 pr-6"
+              onChange={handleSeverityChange}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium text-slate-700 outline-none cursor-pointer focus:bg-white focus:border-blue-500 pr-5"
             >
               <option value="ALL">Severity: All</option>
               <option value="CRITICAL">Critical</option>
@@ -123,8 +148,8 @@ export default function IncidentsTable({
           <div className="relative">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium text-slate-700 outline-none cursor-pointer focus:bg-white focus:border-blue-500 pr-6"
+              onChange={handleStatusChange}
+              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-medium text-slate-700 outline-none cursor-pointer focus:bg-white focus:border-blue-500 pr-5"
             >
               <option value="ALL">Status: All</option>
               <option value="REPORTED">Reported</option>
@@ -151,7 +176,7 @@ export default function IncidentsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[11px]">
-            {filteredIncidents.length === 0 ? (
+            {paginatedIncidents.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-slate-400">
                   <span className="material-symbols-outlined text-2xl mb-1">search_off</span>
@@ -159,7 +184,7 @@ export default function IncidentsTable({
                 </td>
               </tr>
             ) : (
-              filteredIncidents.map((inc) => {
+              paginatedIncidents.map((inc) => {
                 const isSelected = selectedIncidentId === inc.id;
                 const statusInfo = getStatusBadge(inc.status);
                 const severityClass = getSeverityBadge(inc.severity);
@@ -170,7 +195,7 @@ export default function IncidentsTable({
                     onClick={() => onSelectIncident(inc)}
                     className={`transition-colors cursor-pointer ${
                       isSelected
-                        ? "bg-blue-50/40 hover:bg-blue-50/60"
+                        ? "bg-blue-50/50 hover:bg-blue-50/70"
                         : "hover:bg-slate-50"
                     }`}
                   >
@@ -207,7 +232,7 @@ export default function IncidentsTable({
                               onOpenInvestigation(inc.id);
                             }
                           }}
-                          className="px-2 py-0.5 rounded bg-blue-600 text-white font-semibold text-[11px] hover:bg-blue-700 transition-colors cursor-pointer"
+                          className="px-2 py-0.5 rounded bg-blue-600 text-white font-semibold text-[11px] hover:bg-blue-700 transition-colors cursor-pointer shadow-2xs"
                           type="button"
                         >
                           Open Investigation
@@ -233,10 +258,48 @@ export default function IncidentsTable({
         </table>
       </div>
 
-      {/* Table Footer */}
-      <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-50/60 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-        <span>Demonstration sample active incidents</span>
-        <span>Total: {filteredIncidents.length} listed</span>
+      {/* Table Footer with Pagination */}
+      <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 font-medium">
+        <div>
+          <span>
+            Showing {filteredIncidents.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}–
+            {Math.min(currentPage * PAGE_SIZE, filteredIncidents.length)} of {filteredIncidents.length} incidents
+          </span>
+          {onViewAllClick && (
+            <button
+              onClick={onViewAllClick}
+              type="button"
+              className="ml-2 text-blue-600 hover:text-blue-800 font-semibold cursor-pointer underline decoration-dotted"
+            >
+              Full Explorer →
+            </button>
+          )}
+        </div>
+
+        {/* Pagination Buttons */}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 text-[10px] font-semibold transition-colors"
+              type="button"
+            >
+              Prev
+            </button>
+            <span className="px-1 text-[10px] font-mono text-slate-600">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 text-[10px] font-semibold transition-colors"
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

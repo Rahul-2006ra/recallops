@@ -283,6 +283,7 @@ export default function App() {
                     onInvestigateClick={() => handleInvestigate(selectedIncident?.id)}
                     onRepairClick={() => handleOpenRepair(selectedIncident)}
                     onVerifyClick={() => handleOpenVerify(selectedIncident)}
+                    allIncidents={incidents}
                   />
 
                   {/* Active Incidents Table (8 cols) + Verification Protocol (4 cols) */}
@@ -293,6 +294,7 @@ export default function App() {
                         selectedIncidentId={selectedIncident?.id}
                         onSelectIncident={handleSelectIncident}
                         onOpenInvestigation={handleOpenInvestigation}
+                        onViewAllClick={() => setActiveTab("incidents")}
                       />
                     </div>
                     <div className="lg:col-span-4">

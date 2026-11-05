@@ -8,6 +8,7 @@ export default function VerifyOutcomeModal({ isOpen, incident, onClose, onSubmit
     vibration_level: "1.2",
     temperature_c: "48",
   });
+  const [acknowledged, setAcknowledged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -179,6 +180,22 @@ export default function VerifyOutcomeModal({ isOpen, incident, onClose, onSubmit
             />
           </div>
 
+          {/* Audit Confirmation Checkbox */}
+          <label className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/80 border border-amber-200/90 cursor-pointer select-none transition-colors hover:bg-amber-50">
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(e) => setAcknowledged(e.target.checked)}
+              className="mt-0.5 rounded border-amber-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+            />
+            <div className="text-[11px] leading-relaxed text-amber-900">
+              <span className="font-bold block text-amber-950 mb-0.5">
+                Episodic Retention Acknowledgment (Irreversible)
+              </span>
+              I acknowledge that verifying this outcome will permanently commit ground truth and retain an episodic memory record (<code className="font-mono bg-white px-1 py-0.2 rounded border border-amber-200 font-bold">OUTCOME-{incident.id}</code>) to Hindsight Cloud. Once retained, this verification status is locked.
+            </div>
+          </label>
+
           <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
             <button
               type="button"
@@ -190,8 +207,9 @@ export default function VerifyOutcomeModal({ isOpen, incident, onClose, onSubmit
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+              disabled={loading || !acknowledged}
+              title={!acknowledged ? "Please check the acknowledgment box above to confirm retention" : undefined}
+              className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
