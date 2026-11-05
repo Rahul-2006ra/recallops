@@ -7,13 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        industrial: {
-          900: '#0f172a',
-          800: '#1e293b',
-          700: '#334155',
-          accent: '#f59e0b',
-        }
-      }
+        "surface-workspace": "#F8FAFC",
+        "navy-sidebar": "#111827",
+        "navy-sidebar-dark": "#0B0F17",
+        primary: {
+          DEFAULT: "#3b82f6",
+          container: "#2563eb",
+          light: "#eff6ff",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        xs: "0 1px 2px 0 rgba(15, 23, 42, 0.05)",
+        "2xs": "0 1px 1px 0 rgba(15, 23, 42, 0.03)",
+      },
     },
   },
   plugins: [],
