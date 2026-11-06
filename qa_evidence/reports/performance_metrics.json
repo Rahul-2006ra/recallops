@@ -1,0 +1,6 @@
+{
+  "frontend_avg_ms": 129.53,
+  "backend_health_avg_ms": 476.14,
+  "backend_incidents_list_avg_ms": 263.98,
+  "ai_investigation_total_ms": 13043.77
+}

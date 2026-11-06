@@ -1,0 +1,92 @@
+{
+  "total": 17,
+  "passed": 17,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "GET /health",
+      "passed": true,
+      "details": "status=200"
+    },
+    {
+      "name": "GET /",
+      "passed": true,
+      "details": "status=200"
+    },
+    {
+      "name": "CORS Preflight (Origin validation)",
+      "passed": true,
+      "details": "allow-origin=https://recallops-lake.vercel.app"
+    },
+    {
+      "name": "CORS Disallowed Origin Rejection",
+      "passed": true,
+      "details": "status=400"
+    },
+    {
+      "name": "POST /api/incidents missing machine_id/symptoms (Validation)",
+      "passed": true,
+      "details": "status=422"
+    },
+    {
+      "name": "GET /api/incidents/{id} 404 for unknown ID",
+      "passed": true,
+      "details": "status=404"
+    },
+    {
+      "name": "POST /investigate 404 for unknown ID",
+      "passed": true,
+      "details": "status=404"
+    },
+    {
+      "name": "POST /repair 404 for unknown ID",
+      "passed": true,
+      "details": "status=404"
+    },
+    {
+      "name": "Safe Error Responses (No stack trace disclosure)",
+      "passed": true,
+      "details": "No internal frames exposed"
+    },
+    {
+      "name": "POST /api/incidents malformed JSON handling",
+      "passed": true,
+      "details": "status=422"
+    },
+    {
+      "name": "POST /api/incidents valid creation",
+      "passed": true,
+      "details": "id=INC-20261106-33F1E9"
+    },
+    {
+      "name": "GET /api/incidents?machine_id=M-201 filtering",
+      "passed": true,
+      "details": "count=1"
+    },
+    {
+      "name": "POST /api/incidents/{id}/repair valid submission",
+      "passed": true,
+      "details": "status=201"
+    },
+    {
+      "name": "POST /verify-outcome type handling",
+      "passed": true,
+      "details": "status=201"
+    },
+    {
+      "name": "POST /verify-outcome successful verification",
+      "passed": true,
+      "details": "hindsight_retained=True"
+    },
+    {
+      "name": "POST /verify-outcome idempotency on duplicate verification",
+      "passed": true,
+      "details": "status=201"
+    },
+    {
+      "name": "Concurrent API load (5 simultaneous requests)",
+      "passed": true,
+      "details": "statuses=[200, 200, 200, 200, 200]"
+    }
+  ]
+}

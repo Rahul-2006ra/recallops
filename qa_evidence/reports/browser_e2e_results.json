@@ -1,0 +1,90 @@
+{
+  "timestamp": "2026-11-06T13:29:27.024Z",
+  "baseUrl": "https://recallops-lake.vercel.app",
+  "consoleErrors": [],
+  "consoleWarnings": [],
+  "failedRequests": [],
+  "viewsTested": [
+    {
+      "tab": "overview",
+      "status": "rendered",
+      "screenshot": "tab_overview.png"
+    },
+    {
+      "tab": "ai-investigations",
+      "status": "rendered",
+      "screenshot": "tab_ai-investigations.png"
+    },
+    {
+      "tab": "hindsight-memory",
+      "status": "rendered",
+      "screenshot": "tab_hindsight-memory.png"
+    },
+    {
+      "tab": "learning-benchmark",
+      "status": "rendered",
+      "screenshot": "tab_learning-benchmark.png"
+    },
+    {
+      "tab": "incidents",
+      "status": "rendered",
+      "screenshot": "tab_incidents.png"
+    },
+    {
+      "tab": "machines",
+      "status": "rendered",
+      "screenshot": "tab_machines.png"
+    }
+  ],
+  "modalsTested": [
+    {
+      "modal": "Report Incident",
+      "status": "passed"
+    }
+  ],
+  "responsiveTested": [
+    {
+      "viewport": "mobile_375x812",
+      "width": 375,
+      "height": 812,
+      "hasHorizontalOverflow": false,
+      "screenshot": "responsive_mobile_375x812_overview.png"
+    },
+    {
+      "viewport": "mobile_390x844",
+      "width": 390,
+      "height": 844,
+      "hasHorizontalOverflow": false,
+      "screenshot": "responsive_mobile_390x844_overview.png"
+    },
+    {
+      "viewport": "tablet_768x1024",
+      "width": 768,
+      "height": 1024,
+      "hasHorizontalOverflow": false,
+      "screenshot": "responsive_tablet_768x1024_overview.png"
+    },
+    {
+      "viewport": "laptop_1366x768",
+      "width": 1366,
+      "height": 768,
+      "hasHorizontalOverflow": false,
+      "screenshot": "responsive_laptop_1366x768_overview.png"
+    },
+    {
+      "viewport": "desktop_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "hasHorizontalOverflow": false,
+      "screenshot": "responsive_desktop_1920x1080_overview.png"
+    }
+  ],
+  "e2eWorkflow": {
+    "incidentSubmitted": true,
+    "investigationGenerated": true,
+    "repairLogged": true
+  },
+  "passed": 19,
+  "failed": 0,
+  "homepageLoadTimeMs": 2219
+}
