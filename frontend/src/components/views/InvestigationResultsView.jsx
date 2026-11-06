@@ -23,36 +23,106 @@ export default function InvestigationResultsView({
   const [successToast, setSuccessToast] = useState(false);
 
   const incident = selectedIncident || (allIncidents.length > 0 ? allIncidents[0] : null);
-  const investigation = incidentDetails?.investigation || incident?.investigation;
+  const investigation =
+    incidentDetails?.investigation ||
+    (incidentDetails?.investigations && incidentDetails.investigations[0]) ||
+    incident?.investigation ||
+    null;
   const repairs = incidentDetails?.repairs || [];
   const latestRepair = repairs[repairs.length - 1];
 
-  const hasDiagnosis = !!investigation?.diagnosis;
+  const hasDiagnosis = !!(investigation?.diagnosis || investigation?.diagnosis_hypothesis);
+  const diagnosisText = investigation?.diagnosis || investigation?.diagnosis_hypothesis || "";
+  const diagnosticSteps =
+    (investigation?.recommended_diagnostic_steps && investigation.recommended_diagnostic_steps.length > 0)
+      ? investigation.recommended_diagnostic_steps
+      : (investigation?.recommended_actions && investigation.recommended_actions.length > 0)
+      ? investigation.recommended_actions
+      : [];
 
-  // Curated historical evidence cards based on verified Hindsight records
-  const successfulEvidence = {
-    type: "success",
-    status: "Verified Success",
-    asset: "M-112 (Centrifugal Slurry Pump)",
-    title: "Case #INC-20261105-CF6B1D — Asset M-112",
-    date: "NOV 2026",
-    symptoms: "Abnormal 7.4 mm/s vibration at 1750 RPM and 86°C casing temperature spike; intake grilles completely clean.",
-    repair_action: "Laser aligned motor-pump shaft coupling and dynamically balanced the pump impeller. Actuator intact.",
-    outcome: "Post-repair vibration normalized to 1.2 mm/s; temperature stabilized at 48°C. Confirmed in Hindsight Cloud by TECH-941.",
-    details: "High-frequency harmonics indicated mechanical misalignment. Replaced damaged coupling insert, verified radial offset to <0.05 mm, and re-balanced impeller. Zero vibration recurrence.",
+  // Extract genuine precedent records returned by the backend API
+  const getActualPrecedents = () => {
+    if (!investigation) return [];
+
+    const precedents = [];
+    const supporting = (investigation.supporting_evidence || []).filter(
+      (s) =>
+        typeof s === "string" &&
+        !s.toLowerCase().includes("no prior historical incident records exist") &&
+        !s.toLowerCase().includes("current incident") &&
+        !s.toLowerCase().includes("current pump") &&
+        !s.toLowerCase().includes("current observation")
+    );
+    const unsuccessful = (investigation.unsuccessful_previous_repairs || []).filter(
+      (u) => typeof u === "string" && u.trim().length > 0
+    );
+    const citations = (investigation.relevant_historical_incidents || []).filter(
+      (c) => typeof c === "string" && c.trim().length > 0
+    );
+
+    // 1. Genuine successful precedent from Hindsight
+    if (supporting.length > 0) {
+      const assetMatch =
+        citations.find((c) => !unsuccessful.some((u) => u.includes(c))) ||
+        citations[0] ||
+        (incident?.machine_id ? `Verified Unit (${incident.machine_id})` : "Verified Asset");
+
+      precedents.push({
+        id: "precedent-success",
+        type: "success",
+        status: "Verified Success",
+        badgeLabel: "Verified Success",
+        badgeColor: "bg-secondary-container text-on-secondary-container",
+        borderColor: "border-emerald-500/30",
+        icon: "check_circle",
+        iconColor: "text-on-secondary-container",
+        titleLabel: "Previous Successful Repair",
+        title: `Precedent Record // ${assetMatch}`,
+        asset: assetMatch,
+        date: investigation.created_at
+          ? new Date(investigation.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }).toUpperCase()
+          : "HINDSIGHT MEMORY",
+        symptoms: incident?.symptoms || "High-frequency vibration & casing temperature rise under continuous load.",
+        repair_action: supporting[0],
+        outcome: supporting.length > 1 ? supporting[1] : "Remediation verified effective; operating parameters normalized.",
+        details: supporting.join(" "),
+      });
+    }
+
+    // 2. Genuine unsuccessful precedent from Hindsight
+    if (unsuccessful.length > 0) {
+      const assetMatch =
+        citations.find((c) => unsuccessful.some((u) => u.includes(c))) ||
+        citations[1] ||
+        citations[0] ||
+        "Historical Attempt";
+
+      precedents.push({
+        id: "precedent-unsuccessful",
+        type: "failure",
+        status: "Verified Unsuccessful",
+        badgeLabel: "Verified Unsuccessful",
+        badgeColor: "bg-error-container text-on-error-container",
+        borderColor: "border-error/30",
+        icon: "warning",
+        iconColor: "text-error",
+        titleLabel: "Previous Unsuccessful Repair",
+        title: `Precedent Record // ${assetMatch}`,
+        asset: assetMatch,
+        date: investigation.created_at
+          ? new Date(investigation.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }).toUpperCase()
+          : "HINDSIGHT MEMORY",
+        symptoms: "Elevated operating temperature / recurrence despite physical intervention.",
+        repair_action: unsuccessful[0],
+        outcome: "Defect recurred; physical intervention failed to resolve underlying thermal or vibrational anomaly.",
+        details: unsuccessful.join(" "),
+      });
+    }
+
+    return precedents;
   };
 
-  const unsuccessfulEvidence = {
-    type: "failure",
-    status: "Verified Unsuccessful",
-    asset: "DEMO-M-108 (Drive Motor & Bearing Housing)",
-    title: "Case #DEMO-M-108 — Drive Assembly",
-    date: "OCT 2026",
-    symptoms: "89.4°C motor drive-end temperature rise and abnormal cyclical noise within 30 minutes of continuous duty.",
-    repair_action: "Replaced primary drive bearings (SKF-6205-2RSH) without clearing obstructed intake ventilation path.",
-    outcome: "Recurred within 28 minutes. $6,800 bearing expense failed to resolve overheating. Thermal overload tripped again.",
-    details: "Technician replaced bearings under false assumption of bearing seizure. Failure trace confirmed clogged ventilation filter caused thermal runaway regardless of new bearings.",
-  };
+  const actualPrecedents = getActualPrecedents();
 
   const handleOpenEvidence = (evidenceData) => {
     setActiveEvidence(evidenceData);
@@ -269,7 +339,9 @@ export default function InvestigationResultsView({
                     compare_arrows
                   </span>
                   <span className="font-label-sm text-label-sm font-semibold tracking-wide">
-                    Retrieved from 2 historical parity matches
+                    {actualPrecedents.length > 0
+                      ? `Retrieved from ${actualPrecedents.length} historical parity match${actualPrecedents.length > 1 ? "es" : ""}`
+                      : "Zero historical parity matches found"}
                   </span>
                 </div>
               </div>
@@ -280,7 +352,7 @@ export default function InvestigationResultsView({
                   Synthesized Diagnosis (Root Cause Hypothesis)
                 </div>
                 <p className="font-title-lg text-title-lg text-on-surface font-semibold leading-relaxed">
-                  {investigation.diagnosis}
+                  {diagnosisText}
                 </p>
                 {investigation.confidence && (
                   <div className="mt-3 pt-2.5 border-t border-surface-variant/40 flex items-center justify-between text-xs text-on-surface-variant font-mono">
@@ -297,40 +369,39 @@ export default function InvestigationResultsView({
                     Prescribed Action Protocol
                   </div>
                   <span className="font-label-sm text-label-sm text-primary-container font-medium">
-                    {investigation.recommended_actions?.length || 3} Sequential Steps
+                    {diagnosticSteps.length} Sequential Steps
                   </span>
                 </div>
 
                 <div className="space-y-3">
-                  {(investigation.recommended_actions && investigation.recommended_actions.length > 0
-                    ? investigation.recommended_actions
-                    : [
-                        "Isolate & depressurize secondary bypass manifold B-2 before dismounting main manifold block.",
-                        "Inspect seat O-ring seal (Viton 90 Durometer) for thermal micro-fissuring and extrusion along low-pressure channel.",
-                        "Execute closed-loop pressure hold test at 2,400 PSI for 180 seconds continuously to confirm hydraulic integrity.",
-                      ]
-                  ).map((step, idx) => (
-                    <div
-                      key={idx}
-                      className="group rounded-lg bg-surface-container p-4 border border-outline-variant/20 hover:border-primary-container/40 transition-all duration-200 hover:bg-surface-bright flex items-start gap-3.5 shadow-md"
-                    >
-                      <span className="w-7 h-7 rounded bg-primary-container text-on-primary-container font-label-lg text-label-lg flex items-center justify-center font-bold shrink-0 mt-0.5 shadow-sm">
-                        {idx + 1}
-                      </span>
-                      <div className="flex flex-col gap-y-1 min-w-0">
-                        <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary-container transition-colors">
-                          {cleanStepText(step)}
+                  {diagnosticSteps.length === 0 ? (
+                    <p className="font-body-sm text-on-surface-variant italic p-4 rounded-lg bg-surface-container border border-outline-variant/20">
+                      No sequential diagnostic steps returned.
+                    </p>
+                  ) : (
+                    diagnosticSteps.map((step, idx) => (
+                      <div
+                        key={idx}
+                        className="group rounded-lg bg-surface-container p-4 border border-outline-variant/20 hover:border-primary-container/40 transition-all duration-200 hover:bg-surface-bright flex items-start gap-3.5 shadow-md"
+                      >
+                        <span className="w-7 h-7 rounded bg-primary-container text-on-primary-container font-label-lg text-label-lg flex items-center justify-center font-bold shrink-0 mt-0.5 shadow-sm">
+                          {idx + 1}
                         </span>
+                        <div className="flex flex-col gap-y-1 min-w-0">
+                          <span className="font-title-sm text-title-sm text-on-surface font-semibold group-hover:text-primary-container transition-colors">
+                            {cleanStepText(step)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
           </section>
         )}
 
-        {/* 3. WHAT RECALLOPS REMEMBERED (2-COLUMN CARDS) */}
+        {/* 3. WHAT RECALLOPS REMEMBERED */}
         <section className="flex flex-col gap-y-4">
           <div className="flex flex-col gap-y-1">
             <div className="flex items-center gap-2">
@@ -346,139 +417,93 @@ export default function InvestigationResultsView({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* CARD 1: Previous Successful Repair */}
-            <article className="rounded-xl bg-surface-container p-6 border border-emerald-500/30 shadow-xl flex flex-col justify-between gap-y-5 transition-transform duration-200 hover:-translate-y-1">
-              <div className="flex flex-col gap-y-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-secondary-container text-on-secondary-container shadow-sm">
-                    <span className="material-symbols-outlined text-[16px] text-on-secondary-container">
-                      check_circle
-                    </span>
-                    <span className="font-label-sm text-label-sm uppercase font-bold tracking-wider">
-                      Verified Success
-                    </span>
-                  </div>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-mono">
-                    {successfulEvidence.date}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-y-1">
-                  <span className="font-label-sm text-label-sm uppercase text-secondary font-semibold">
-                    Previous Successful Repair
-                  </span>
-                  <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
-                    {successfulEvidence.title}
-                  </h3>
-                </div>
-
-                <div className="space-y-3 rounded-lg bg-surface-container-lowest p-4 border border-outline-variant/20">
-                  <div>
-                    <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
-                      Symptom Summary
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
-                      {successfulEvidence.symptoms}
-                    </div>
-                  </div>
-                  <div className="h-px bg-surface-variant/40"></div>
-                  <div>
-                    <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
-                      Repair Action
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
-                      {successfulEvidence.repair_action}
-                    </div>
-                  </div>
-                  <div className="h-px bg-surface-variant/40"></div>
-                  <div>
-                    <div className="font-label-sm text-label-sm text-primary font-semibold uppercase">
-                      Verified Outcome
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface font-medium mt-0.5">
-                      {successfulEvidence.outcome}
-                    </div>
-                  </div>
-                </div>
+          {actualPrecedents.length === 0 ? (
+            <div className="rounded-xl bg-surface-container p-8 border border-outline-variant/30 text-center flex flex-col items-center justify-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-surface-container-high border border-outline-variant/30 flex items-center justify-center text-outline">
+                <span className="material-symbols-outlined text-[24px]">
+                  history_toggle_off
+                </span>
               </div>
+              <h3 className="font-title-md text-title-md text-on-surface font-semibold">
+                No verified repair history found for this investigation.
+              </h3>
+              <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
+                Hindsight Cloud memory bank returned zero matching precedent episodes for this anomaly profile. Recommendations are generated from baseline operational schemas.
+              </p>
+            </div>
+          ) : (
+            <div className={`grid grid-cols-1 ${actualPrecedents.length > 1 ? "md:grid-cols-2" : "max-w-2xl mx-auto w-full"} gap-6`}>
+              {actualPrecedents.map((precedent) => (
+                <article
+                  key={precedent.id}
+                  className={`rounded-xl bg-surface-container p-6 border ${precedent.borderColor} shadow-xl flex flex-col justify-between gap-y-5 transition-transform duration-200 hover:-translate-y-1`}
+                >
+                  <div className="flex flex-col gap-y-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded ${precedent.badgeColor} shadow-sm`}>
+                        <span className={`material-symbols-outlined text-[16px] ${precedent.iconColor}`}>
+                          {precedent.icon}
+                        </span>
+                        <span className="font-label-sm text-label-sm uppercase font-bold tracking-wider">
+                          {precedent.badgeLabel}
+                        </span>
+                      </div>
+                      <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-mono">
+                        {precedent.date}
+                      </span>
+                    </div>
 
-              <button
-                type="button"
-                onClick={() => handleOpenEvidence(successfulEvidence)}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded bg-surface-container-high text-primary-container hover:bg-surface-bright font-title-sm text-title-sm font-semibold transition-colors shadow-sm cursor-pointer border border-outline-variant/20"
-              >
-                <span>View Evidence</span>
-                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-              </button>
-            </article>
+                    <div className="flex flex-col gap-y-1">
+                      <span className={`font-label-sm text-label-sm uppercase ${precedent.type === "success" ? "text-secondary" : "text-error"} font-semibold`}>
+                        {precedent.titleLabel}
+                      </span>
+                      <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
+                        {precedent.title}
+                      </h3>
+                    </div>
 
-            {/* CARD 2: Previous Unsuccessful Repair */}
-            <article className="rounded-xl bg-surface-container p-6 border border-error/30 shadow-xl flex flex-col justify-between gap-y-5 transition-transform duration-200 hover:-translate-y-1">
-              <div className="flex flex-col gap-y-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-error-container text-on-error-container shadow-sm">
-                    <span className="material-symbols-outlined text-[16px] text-error">
-                      warning
-                    </span>
-                    <span className="font-label-sm text-label-sm uppercase font-bold tracking-wider">
-                      Verified Unsuccessful
-                    </span>
+                    <div className="space-y-3 rounded-lg bg-surface-container-lowest p-4 border border-outline-variant/20">
+                      <div>
+                        <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
+                          Symptom Summary
+                        </div>
+                        <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
+                          {precedent.symptoms}
+                        </div>
+                      </div>
+                      <div className="h-px bg-surface-variant/40"></div>
+                      <div>
+                        <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
+                          Repair Action
+                        </div>
+                        <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
+                          {precedent.repair_action}
+                        </div>
+                      </div>
+                      <div className="h-px bg-surface-variant/40"></div>
+                      <div>
+                        <div className={`font-label-sm text-label-sm ${precedent.type === "success" ? "text-primary" : "text-error"} font-semibold uppercase`}>
+                          Verified Outcome
+                        </div>
+                        <div className="font-body-sm text-body-sm text-on-surface font-medium mt-0.5">
+                          {precedent.outcome}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-mono">
-                    {unsuccessfulEvidence.date}
-                  </span>
-                </div>
 
-                <div className="flex flex-col gap-y-1">
-                  <span className="font-label-sm text-label-sm uppercase text-error font-semibold">
-                    Previous Unsuccessful Repair
-                  </span>
-                  <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
-                    {unsuccessfulEvidence.title}
-                  </h3>
-                </div>
-
-                <div className="space-y-3 rounded-lg bg-surface-container-lowest p-4 border border-outline-variant/20">
-                  <div>
-                    <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
-                      Symptom Summary
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
-                      {unsuccessfulEvidence.symptoms}
-                    </div>
-                  </div>
-                  <div className="h-px bg-surface-variant/40"></div>
-                  <div>
-                    <div className="font-label-sm text-label-sm text-on-surface-variant uppercase font-medium">
-                      Repair Action
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface mt-0.5">
-                      {unsuccessfulEvidence.repair_action}
-                    </div>
-                  </div>
-                  <div className="h-px bg-surface-variant/40"></div>
-                  <div>
-                    <div className="font-label-sm text-label-sm text-error font-semibold uppercase">
-                      Verified Outcome
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-surface font-medium mt-0.5">
-                      {unsuccessfulEvidence.outcome}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleOpenEvidence(unsuccessfulEvidence)}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded bg-surface-container-high text-primary-container hover:bg-surface-bright font-title-sm text-title-sm font-semibold transition-colors shadow-sm cursor-pointer border border-outline-variant/20"
-              >
-                <span>View Evidence</span>
-                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-              </button>
-            </article>
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEvidence(precedent)}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded bg-surface-container-high text-primary-container hover:bg-surface-bright font-title-sm text-title-sm font-semibold transition-colors shadow-sm cursor-pointer border border-outline-variant/20"
+                  >
+                    <span>View Evidence</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 4. ACTION AREA (BOTTOM CONTAINER) */}

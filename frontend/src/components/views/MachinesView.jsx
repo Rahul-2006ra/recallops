@@ -3,7 +3,7 @@ import React, { useState } from "react";
 export default function MachinesView({ incidents = [], onSelectIncident, onOpenReportModal, onNavigateTab }) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Base machinery fleet in the plant
+  // Base machinery fleet in the plant (Predefined demo data)
   const fleetMachines = [
     {
       id: "M-112",
@@ -13,6 +13,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
       hindsight_code: "REC-112",
       icon: "precision_manufacturing",
       specs: "1750 RPM · 75 kW Drive · SKF Bearings",
+      isDemo: true,
     },
     {
       id: "DEMO-M-104",
@@ -22,6 +23,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
       hindsight_code: "REC-104",
       icon: "water_pump",
       specs: "1450 RPM · Dual Impeller · In-line Chiller",
+      isDemo: true,
     },
     {
       id: "DEMO-M-108",
@@ -31,6 +33,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
       hindsight_code: "REC-108",
       icon: "settings_slow_motion",
       specs: "2800 RPM · 45 kW Induction · Forced Air",
+      isDemo: true,
     },
     {
       id: "HP-450",
@@ -40,6 +43,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
       hindsight_code: "REC-450",
       icon: "compress",
       specs: "450 Ton Force · 2,400 PSI Nominal · Servo Actuated",
+      isDemo: true,
     },
     {
       id: "PUMP-04",
@@ -49,6 +53,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
       hindsight_code: "REC-004",
       icon: "hvac",
       specs: "3000 RPM · Multi-Stage Turbine · Water Feed",
+      isDemo: true,
     },
   ];
 
@@ -66,6 +71,7 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
         hindsight_code: `REC-${id.slice(-3).toUpperCase()}`,
         icon: "precision_manufacturing",
         specs: "Operational Plant Machinery Unit",
+        isDemo: Boolean(matchInc?.is_demo),
       });
     }
   });
@@ -217,10 +223,23 @@ export default function MachinesView({ incidents = [], onSelectIncident, onOpenR
                 >
                   <div className="flex flex-col gap-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-surface-container-highest border border-outline-variant/30 flex items-center justify-center text-primary group-hover:text-primary-container group-hover:border-primary-container/40 transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-[26px]">
-                          {machine.icon}
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-surface-container-highest border border-outline-variant/30 flex items-center justify-center text-primary group-hover:text-primary-container group-hover:border-primary-container/40 transition-colors shadow-inner">
+                          <span className="material-symbols-outlined text-[26px]">
+                            {machine.icon}
+                          </span>
+                        </div>
+                        {machine.isDemo ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                            Predefined Demo Data
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider bg-primary-container/10 text-primary-container border border-primary-container/20 font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+                            Dynamic Discovered Asset
+                          </span>
+                        )}
                       </div>
 
                       <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border ${status.color}`}>

@@ -40,8 +40,8 @@ export default function BenchmarkView() {
         <section className="flex flex-col items-center text-center space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-surface-container-high border border-primary-container/20 shadow-[0_0_12px_rgba(13,242,200,0.15)]">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-container shadow-[0_0_6px_rgba(13,242,200,0.8)] animate-pulse"></span>
-            <span className="font-label-sm text-label-sm text-primary-container uppercase tracking-widest font-semibold">
-              HINDSIGHT LEARNING EXPERIMENT
+            <span className="font-label-sm text-label-sm text-primary-container uppercase tracking-widest font-semibold font-mono">
+              CONTROLLED SYNTHETIC EXPERIMENT // HINDSIGHT BENCHMARK
             </span>
           </div>
 
@@ -53,15 +53,15 @@ export default function BenchmarkView() {
           </h1>
 
           <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
-            See how one verified repair experience changes RecallOps’ recommendations for a similar machine failure without re-tuning model parameters.
+            Controlled synthetic experiment demonstrating how one verified repair experience changes RecallOps’ recommendations for a similar machine failure without re-tuning model parameters.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2 text-on-surface-variant font-label-sm text-label-sm">
             <span className="flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[15px] text-primary-container">
-                verified_user
+                science
               </span>
-              Empirical Validation Harness
+              Controlled Synthetic Trials
             </span>
             <span className="text-outline-variant">•</span>
             <span className="flex items-center gap-1.5">
@@ -84,7 +84,7 @@ export default function BenchmarkView() {
             <div className="flex items-center gap-2">
               <span className="font-label-sm text-label-sm uppercase text-outline font-semibold">Inspect Trial:</span>
               <span className="font-mono text-primary-container font-semibold">
-                Trial {selectedTrialTab} of 3
+                Synthetic Trial {selectedTrialTab} of 3
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -400,8 +400,8 @@ export default function BenchmarkView() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-primary-container"></span>
-              <span className="font-label-sm text-label-sm uppercase tracking-wider text-primary-container font-semibold">
-                CONTROLLED SIMULATION BENCHMARK
+              <span className="font-label-sm text-label-sm uppercase tracking-wider text-primary-container font-semibold font-mono">
+                CONTROLLED SYNTHETIC BENCHMARK RESULTS
               </span>
             </div>
             <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold">
@@ -569,8 +569,8 @@ export default function BenchmarkView() {
               </div>
 
               <div className="p-3 rounded bg-surface-container-lowest border border-outline-variant/20 text-on-surface-variant font-label-sm text-label-sm leading-relaxed">
-                <strong className="text-secondary block mb-1">Scientific Evaluation Disclaimer:</strong>
-                Results from a controlled simulation using live Hindsight Cloud and Groq API calls. The experiment demonstrates evidence retrieval and a consistent change in diagnostic priorities. It does not establish statistically validated diagnostic accuracy or physical machine performance.
+                <strong className="text-secondary block mb-1">Controlled Synthetic Experiment Notice:</strong>
+                Results from a controlled synthetic experiment using live Hindsight Cloud and Groq API calls. The experiment demonstrates evidence retrieval and a consistent change in diagnostic priorities across identical synthetic trials. It does not establish physical machine performance.
               </div>
             </div>
           )}
