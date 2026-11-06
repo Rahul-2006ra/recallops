@@ -36,12 +36,14 @@ class Settings:
     @property
     def sqlite_db_path(self) -> str:
         """Extract filesystem path from DATABASE_URL."""
-        if self.DATABASE_URL.startswith("sqlite:///"):
-            raw_path = self.DATABASE_URL.replace("sqlite:///", "")
-            if raw_path.startswith("./"):
-                return str(ROOT_DIR / raw_path[2:])
+        raw_path = self.DATABASE_URL
+        if raw_path.startswith("sqlite:///"):
+            raw_path = raw_path[10:]
+        if raw_path.startswith("./"):
+            return str(ROOT_DIR / raw_path[2:])
+        if raw_path.startswith("/") or (len(raw_path) > 2 and raw_path[1] == ":"):
             return raw_path
-        return str(ROOT_DIR / "recallops.db")
+        return str(ROOT_DIR / raw_path)
 
 
 settings = Settings()

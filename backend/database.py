@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import json
 from datetime import datetime, timezone
@@ -7,7 +8,11 @@ from backend.config import settings
 
 def get_db_connection() -> sqlite3.Connection:
     """Create an SQLite database connection with row factory enabled."""
-    conn = sqlite3.connect(settings.sqlite_db_path)
+    db_path = settings.sqlite_db_path
+    parent_dir = os.path.dirname(db_path)
+    if parent_dir and not os.path.exists(parent_dir):
+        os.makedirs(parent_dir, exist_ok=True)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn

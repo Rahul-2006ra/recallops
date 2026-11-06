@@ -3,7 +3,9 @@
  * Connects the frontend to FastAPI backend endpoints.
  */
 
-const API_BASE = "";
+// Base URL for production API requests; falls back to relative path for local proxy
+const rawBase = (import.meta.env?.VITE_API_BASE || "").trim().replace(/\/+$/, "");
+const API_BASE = rawBase.endsWith("/api") ? rawBase.slice(0, -4) : rawBase;
 
 function extractIncidentId(target) {
   if (!target) return "";
