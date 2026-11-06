@@ -3,8 +3,9 @@
  * Connects the frontend to FastAPI backend endpoints.
  */
 
-// Base URL for production API requests; falls back to relative path for local proxy
-const rawBase = (import.meta.env?.VITE_API_BASE || "").trim().replace(/\/+$/, "");
+// Base URL for production API requests; falls back to live Render backend in production, or relative path for local dev proxy
+const defaultBase = import.meta.env?.PROD ? "https://recallops-y3py.onrender.com" : "";
+const rawBase = (import.meta.env?.VITE_API_BASE || defaultBase).trim().replace(/\/+$/, "");
 const API_BASE = rawBase.endsWith("/api") ? rawBase.slice(0, -4) : rawBase;
 
 function extractIncidentId(target) {
