@@ -1,8 +1,7 @@
 """
 RecallOps — Controlled Hindsight Learning Demonstration Experiment Runner
 ========================================================================
-Hackathon: HackwithHyderabad 3.0
-Problem Statement: AI Agents That Learn Using Hindsight
+Focus: Continual Learning for Autonomous Industrial Maintenance Agents
 
 This script executes an isolated, reproducible before-and-after experiment
 evaluating whether RecallOps genuinely adapts its diagnostic hypotheses and
@@ -315,8 +314,7 @@ def generate_markdown_report(results: Dict[str, Any], filepath: str):
 
     md = f"""# Controlled Hindsight Learning Demonstration Report
 
-**Hackathon**: HackwithHyderabad 3.0  
-**Problem Statement**: AI Agents That Learn Using Hindsight  
+**Topic**: Continual Episodic Learning in Industrial Diagnostics  
 **Project**: RecallOps — Industrial Maintenance Intelligence Platform  
 **Date**: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}  
 **Model**: `{results["metadata"]["model"]}`  
@@ -425,7 +423,7 @@ The runner:
 def main():
     print("=" * 70)
     print("RecallOps — Controlled Hindsight Learning Demonstration Runner")
-    print("HackwithHyderabad 3.0 | AI Agents That Learn Using Hindsight")
+    print("Continual Episodic Learning Evaluation | RecallOps Intelligence Platform")
     print("=" * 70)
 
     results = execute_controlled_experiment(num_trials=3)

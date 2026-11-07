@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-06T13:29:27.024Z",
+  "timestamp": "2026-11-07T09:18:43.967Z",
   "baseUrl": "https://recallops-lake.vercel.app",
   "consoleErrors": [],
   "consoleWarnings": [],
@@ -82,9 +82,10 @@
   "e2eWorkflow": {
     "incidentSubmitted": true,
     "investigationGenerated": true,
-    "repairLogged": true
+    "repairLogged": true,
+    "outcomeVerified": true
   },
-  "passed": 19,
+  "passed": 20,
   "failed": 0,
-  "homepageLoadTimeMs": 2219
+  "homepageLoadTimeMs": 3752
 }

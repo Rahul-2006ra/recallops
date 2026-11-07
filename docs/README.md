@@ -4,4 +4,5 @@ This folder contains architectural designs, API specifications, and workflow doc
 
 ## Documents
 
-- [Architecture Overview](file:///c:/Users/rahul/OneDrive/Desktop/Recallops/docs/ARCHITECTURE.md)
+- [Architecture Overview](ARCHITECTURE.md)
+- [Controlled Hindsight Learning Experiment](hindsight-learning-experiment.md)

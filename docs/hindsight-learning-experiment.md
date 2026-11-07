@@ -1,7 +1,6 @@
 # Controlled Hindsight Learning Demonstration Report
 
-**Hackathon**: HackwithHyderabad 3.0  
-**Problem Statement**: AI Agents That Learn Using Hindsight  
+**Topic**: Continual Episodic Learning in Industrial Diagnostics  
 **Project**: RecallOps — Industrial Maintenance Intelligence Platform  
 **Date**: 2026-11-05 08:33:36 UTC  
 **Model**: `openai/gpt-oss-120b`  
