@@ -38,7 +38,7 @@ def test_m112_memory_persistence_in_hindsight():
 
 def test_hindsight_recall_retrieves_m112_for_new_machine():
     """Verify that querying symptoms from M-TEST-002 actually recalls M-112 from Hindsight Cloud."""
-    query = "Industrial Centrifugal Pump High-frequency vibration and overheating after 25 minutes of operation"
+    query = "Centrifugal Slurry Pump high-frequency vibration and casing temperature spike"
     memories = hindsight_service.recall_memories(query=query, budget="mid")
 
     assert len(memories) > 0
