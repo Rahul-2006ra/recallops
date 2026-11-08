@@ -1,0 +1,109 @@
+{
+  "testCases": [
+    {
+      "case": "reportedOnly",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_reportedOnly.png",
+      "passed": true
+    },
+    {
+      "case": "investigated",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_investigated.png",
+      "passed": true
+    },
+    {
+      "case": "repaired",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_repaired.png",
+      "passed": true
+    },
+    {
+      "case": "verifiedSuccess",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_verifiedSuccess.png",
+      "passed": true
+    },
+    {
+      "case": "verifiedFailure",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_verifiedFailure.png",
+      "passed": true
+    },
+    {
+      "case": "incompleteData",
+      "timelineVisible": true,
+      "stages": {
+        "stage1": true,
+        "stage2": true,
+        "stage3": true,
+        "stage4": true,
+        "stage5": true
+      },
+      "screenshot": "timeline_incompleteData.png",
+      "passed": true
+    }
+  ],
+  "responsive": [
+    {
+      "viewport": "mobile_375x812",
+      "width": 375,
+      "height": 812,
+      "hasHorizontalOverflow": false,
+      "passed": true,
+      "screenshot": "responsive_mobile_375x812_timeline.png"
+    },
+    {
+      "viewport": "tablet_768x1024",
+      "width": 768,
+      "height": 1024,
+      "hasHorizontalOverflow": false,
+      "passed": true,
+      "screenshot": "responsive_tablet_768x1024_timeline.png"
+    },
+    {
+      "viewport": "desktop_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "hasHorizontalOverflow": false,
+      "passed": true,
+      "screenshot": "responsive_desktop_1920x1080_timeline.png"
+    }
+  ],
+  "allPassed": true
+}

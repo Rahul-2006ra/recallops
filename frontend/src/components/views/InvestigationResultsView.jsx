@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import EvidenceModal from "../modals/EvidenceModal";
+import IncidentDecisionTimeline from "../IncidentDecisionTimeline";
 
 // Helper to strip duplicate numeric prefixes from diagnostic step text
 const cleanStepText = (step) => {
@@ -505,6 +506,15 @@ export default function InvestigationResultsView({
             </div>
           )}
         </section>
+
+        {/* 3.5 INCIDENT DECISION TIMELINE (END-TO-END LIFECYCLE AUDIT TRAIL) */}
+        <IncidentDecisionTimeline
+          incident={incident}
+          investigation={investigation}
+          repairs={repairs}
+          verifications={incidentDetails?.verifications || []}
+          isLoading={isLoadingDetails}
+        />
 
         {/* 4. ACTION AREA (BOTTOM CONTAINER) */}
         <footer className="rounded-xl bg-surface-container-low p-6 sm:p-7 border border-outline-variant/30 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
