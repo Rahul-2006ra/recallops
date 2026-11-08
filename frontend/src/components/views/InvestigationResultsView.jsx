@@ -42,6 +42,10 @@ export default function InvestigationResultsView({
       ? investigation.recommended_actions
       : [];
 
+  const conflictAnalysis = investigation?.conflict_analysis || null;
+  const hasConflict = conflictAnalysis?.has_conflict || false;
+  const conflictsList = conflictAnalysis?.conflicts || [];
+
   // Extract genuine precedent records returned by the backend API
   const getActualPrecedents = () => {
     if (!investigation) return [];
@@ -449,6 +453,240 @@ export default function InvestigationResultsView({
                 </div>
               </div>
             </div>
+          </section>
+        )}
+
+        {/* REPAIR DECISION INTELLIGENCE */}
+        {hasDiagnosis && (
+          <section
+            id="repair-decision-intelligence-section"
+            className={`rounded-xl bg-surface-container-high p-6 sm:p-7 border ${
+              hasConflict ? "border-amber-500/40 shadow-[0_0_24px_rgba(245,158,11,0.15)]" : "border-primary-container/30 shadow-2xl"
+            } relative overflow-hidden flex flex-col gap-y-5`}
+          >
+            {/* Accent gradient bar */}
+            <div
+              className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${
+                hasConflict
+                  ? "from-transparent via-amber-500 to-transparent"
+                  : "from-transparent via-primary-container to-transparent"
+              }`}
+            ></div>
+
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    hasConflict
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_16px_rgba(245,158,11,0.3)]"
+                      : "bg-primary-container text-on-primary-container shadow-[0_0_16px_rgba(13,242,200,0.3)]"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[24px]">
+                    {hasConflict ? "rule" : "verified"}
+                  </span>
+                </div>
+                <div>
+                  <div
+                    className={`text-[10px] font-bold uppercase tracking-widest ${
+                      hasConflict ? "text-amber-400" : "text-primary-container"
+                    }`}
+                  >
+                    Evidence-Based Decision Engine
+                  </div>
+                  <h2 className="text-base sm:text-lg font-bold text-on-surface tracking-tight">
+                    Repair Decision Intelligence
+                  </h2>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold font-mono border self-start sm:self-center">
+                <span
+                  className={`material-symbols-outlined text-[16px] ${
+                    hasConflict
+                      ? "text-amber-400"
+                      : conflictAnalysis?.caution_actions?.length > 0
+                      ? "text-rose-400"
+                      : "text-primary-container"
+                  }`}
+                >
+                  {hasConflict
+                    ? "warning"
+                    : conflictAnalysis?.caution_actions?.length > 0
+                    ? "report"
+                    : "check_circle"}
+                </span>
+                <span
+                  className={
+                    hasConflict
+                      ? "text-amber-400"
+                      : conflictAnalysis?.caution_actions?.length > 0
+                      ? "text-rose-400"
+                      : "text-primary-container"
+                  }
+                >
+                  {hasConflict
+                    ? "CONFLICTING OUTCOMES DETECTED // FURTHER DIAGNOSIS REQUIRED"
+                    : conflictAnalysis?.caution_actions?.length > 0
+                    ? "PREVIOUSLY UNSUCCESSFUL ACTIONS RECORDED"
+                    : "VERIFIED CONSISTENT PRECEDENTS"}
+                </span>
+              </div>
+            </div>
+
+            {/* Summary Text */}
+            <p className="text-xs sm:text-sm text-on-surface leading-relaxed border-l-2 pl-3 border-outline-variant/60">
+              {conflictAnalysis?.summary ||
+                "Synthesizing historical repair actions and verified outcomes to safeguard against repeat failures."}
+            </p>
+
+            {/* Conflicts Breakdown */}
+            {hasConflict && conflictsList.length > 0 && (
+              <div className="flex flex-col gap-4">
+                {conflictsList
+                  .filter((c) => c.conflict_detected)
+                  .map((conflict, cIdx) => (
+                    <div
+                      key={cIdx}
+                      className="rounded-lg bg-surface-container-lowest/80 border border-amber-500/30 p-4 sm:p-5 flex flex-col gap-4"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-outline-variant/20 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-amber-400 text-[18px]">
+                            sync_problem
+                          </span>
+                          <span className="text-xs font-bold text-on-surface uppercase tracking-wider font-mono">
+                            Contradictory Precedent // {conflict.repair_action}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          {conflict.recommendation_status}
+                        </span>
+                      </div>
+
+                      {/* 2-Column Precedent Comparison */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        {/* Successful Precedents */}
+                        <div className="rounded-lg bg-surface-container/60 border border-emerald-500/30 p-3.5 flex flex-col gap-2">
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase tracking-wider text-[11px]">
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                            <span>Verified Successful Precedent</span>
+                          </div>
+                          {conflict.successful_precedents.map((s, sIdx) => (
+                            <div key={sIdx} className="text-on-surface-variant font-mono text-[11px] leading-relaxed">
+                              <span className="text-on-surface font-semibold">Case {s.case_id}</span> ({s.machine_id || "Asset"}):
+                              <p className="text-[11px] text-on-surface font-sans mt-0.5">{s.operating_conditions || s.repair_action}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Unsuccessful Precedents */}
+                        <div className="rounded-lg bg-surface-container/60 border border-rose-500/30 p-3.5 flex flex-col gap-2">
+                          <div className="flex items-center gap-1.5 text-rose-400 font-bold uppercase tracking-wider text-[11px]">
+                            <span className="material-symbols-outlined text-[16px]">cancel</span>
+                            <span>Verified Unsuccessful Precedent</span>
+                          </div>
+                          {conflict.unsuccessful_precedents.map((u, uIdx) => (
+                            <div key={uIdx} className="text-on-surface-variant font-mono text-[11px] leading-relaxed">
+                              <span className="text-on-surface font-semibold">Case {u.case_id}</span> ({u.machine_id || "Asset"}):
+                              <p className="text-[11px] text-on-surface font-sans mt-0.5">{u.operating_conditions || u.repair_action}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Differentiating Factors */}
+                      {conflict.differentiating_factors?.length > 0 && (
+                        <div className="rounded bg-surface-container/40 p-3 border border-outline-variant/20 flex flex-col gap-1.5 text-xs">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant font-mono">
+                            Relevant Differences Between Historical Incidents:
+                          </span>
+                          <ul className="list-disc list-inside space-y-1 text-on-surface">
+                            {conflict.differentiating_factors.map((df, dfIdx) => (
+                              <li key={dfIdx} className="text-xs">{df}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* AI Interpretation vs Observed Fact */}
+                      <div className="flex flex-col gap-2 rounded bg-surface-container-high/80 p-3 border border-outline-variant/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container border border-primary-container/30">
+                            AI INTERPRETATION
+                          </span>
+                          <span className="text-[11px] text-on-surface-variant">
+                            (Separated from verified observed historical facts)
+                          </span>
+                        </div>
+                        <p className="text-xs text-on-surface leading-relaxed">
+                          {conflict.ai_interpretation}
+                        </p>
+                      </div>
+
+                      {/* Suggested Diagnostic Checks Before Repair */}
+                      {conflict.suggested_diagnostic_checks?.length > 0 && (
+                        <div className="flex flex-col gap-2 rounded bg-amber-500/10 p-3.5 border border-amber-500/30">
+                          <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
+                            <span className="material-symbols-outlined text-[16px]">troubleshoot</span>
+                            <span>Mandatory Pre-Repair Diagnostic Checks</span>
+                          </div>
+                          <ul className="space-y-1.5 text-xs text-on-surface">
+                            {conflict.suggested_diagnostic_checks.map((chk, chkIdx) => (
+                              <li key={chkIdx} className="flex items-start gap-2">
+                                <span className="material-symbols-outlined text-amber-400 text-[14px] shrink-0 mt-0.5">
+                                  arrow_right
+                                </span>
+                                <span>{chk}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Non-conflicting view when previously unsuccessful actions exist */}
+            {!hasConflict && (investigation?.unsuccessful_previous_repairs?.length > 0 || conflictAnalysis?.caution_actions?.length > 0) && (
+              <div className="rounded-lg bg-surface-container-lowest/80 border border-rose-500/30 p-4 flex flex-col gap-2.5 text-xs">
+                <div className="flex items-center gap-1.5 text-rose-400 font-bold uppercase tracking-wider text-[11px] font-mono">
+                  <span className="material-symbols-outlined text-[16px]">block</span>
+                  <span>Previously Unsuccessful Actions (Do Not Repeat)</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-on-surface">
+                  {(conflictAnalysis?.caution_actions?.length > 0
+                    ? conflictAnalysis.caution_actions
+                    : investigation.unsuccessful_previous_repairs
+                  ).map((unsucc, uIdx) => (
+                    <li key={uIdx} className="text-xs font-semibold text-rose-300">
+                      {unsucc}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-on-surface-variant italic mt-0.5">
+                  RecallOps advises against repeating these procedures without first confirming new physical telemetry.
+                </p>
+              </div>
+            )}
+
+            {/* Consistent Recommended Action when no conflict */}
+            {!hasConflict && (conflictAnalysis?.recommended_action || actualPrecedents?.find(p => p.type === "success")) && (
+              <div className="rounded-lg bg-surface-container-lowest/80 border border-primary-container/30 p-4 flex flex-col gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-primary-container font-bold uppercase tracking-wider text-[11px] font-mono">
+                  <span className="material-symbols-outlined text-[16px]">task_alt</span>
+                  <span>Recommended Action Path</span>
+                </div>
+                <p className="text-xs text-on-surface">
+                  {conflictAnalysis?.recommended_action
+                    ? `Historical precedent consistently supports: ${conflictAnalysis.recommended_action}.`
+                    : `Action supported by verified successful historical repair precedent.`}
+                </p>
+              </div>
+            )}
           </section>
         )}
 

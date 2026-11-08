@@ -8,6 +8,7 @@ from backend.services.hindsight_service import (
 )
 from backend.services.groq_service import groq_service, GroqService
 from backend.services.investigation_service import investigation_service, InvestigationService
+from backend.services.repair_conflict_service import repair_conflict_service, RepairConflictService
 
 __all__ = [
     "hindsight_service",
@@ -20,4 +21,6 @@ __all__ = [
     "GroqService",
     "investigation_service",
     "InvestigationService",
+    "repair_conflict_service",
+    "RepairConflictService",
 ]

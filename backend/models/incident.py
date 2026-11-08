@@ -35,6 +35,38 @@ class IncidentResponse(BaseModel):
     updated_at: str
 
 
+class HistoricalPrecedentRecord(BaseModel):
+    case_id: str
+    machine_id: Optional[str] = None
+    equipment_type: Optional[str] = None
+    repair_action: str
+    outcome_status: Literal["SUCCESSFUL", "UNSUCCESSFUL", "UNVERIFIED"]
+    operating_conditions: Optional[str] = None
+    is_verified: bool = True
+
+
+class ConflictingRepairAnalysis(BaseModel):
+    repair_action: str
+    normalized_action: str
+    recommendation_status: Literal["RECOMMENDED", "CAUTION", "FURTHER_DIAGNOSIS_REQUIRED", "INSUFFICIENT_DATA"]
+    conflict_detected: bool
+    successful_precedents: list[HistoricalPrecedentRecord] = Field(default_factory=list)
+    unsuccessful_precedents: list[HistoricalPrecedentRecord] = Field(default_factory=list)
+    differentiating_factors: list[str] = Field(default_factory=list)
+    observed_historical_evidence: list[str] = Field(default_factory=list)
+    ai_interpretation: str = ""
+    suggested_diagnostic_checks: list[str] = Field(default_factory=list)
+
+
+class RepairDecisionIntelligence(BaseModel):
+    has_conflict: bool = False
+    summary: str = ""
+    conflicts: list[ConflictingRepairAnalysis] = Field(default_factory=list)
+    recommended_action: Optional[str] = None
+    caution_actions: list[str] = Field(default_factory=list)
+    suggested_diagnostic_checks: list[str] = Field(default_factory=list)
+
+
 class InvestigationResponse(BaseModel):
     id: str
     incident_id: str
@@ -45,6 +77,7 @@ class InvestigationResponse(BaseModel):
     supporting_evidence: list[str]
     unsuccessful_previous_repairs: list[str]
     safety_warnings: list[str]
+    conflict_analysis: Optional[RepairDecisionIntelligence] = None
     created_at: str
 
 

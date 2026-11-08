@@ -13,6 +13,7 @@ from backend.models.incident import (
     VerifyOutcomeCreate,
     VerifyOutcomeResponse,
     IncidentDetailResponse,
+    RepairDecisionIntelligence,
 )
 from backend.services.hindsight_service import (
     hindsight_service,
@@ -20,6 +21,7 @@ from backend.services.hindsight_service import (
     classify_hindsight_exception,
 )
 from backend.services.groq_service import groq_service
+from backend.services.repair_conflict_service import repair_conflict_service
 
 logger = logging.getLogger(__name__)
 
@@ -139,21 +141,33 @@ class InvestigationService:
             # Investigations
             cursor.execute("SELECT * FROM investigations WHERE incident_id = ? ORDER BY created_at DESC", (incident_id,))
             inv_rows = cursor.fetchall()
-            investigations = [
-                InvestigationResponse(
-                    id=r["id"],
-                    incident_id=r["incident_id"],
-                    diagnosis_hypothesis=r["diagnosis_hypothesis"],
-                    confidence=r["confidence"],
-                    recommended_diagnostic_steps=json.loads(r["recommended_diagnostic_steps"]),
-                    relevant_historical_incidents=json.loads(r["relevant_historical_incidents"]),
-                    supporting_evidence=json.loads(r["supporting_evidence"]),
-                    unsuccessful_previous_repairs=json.loads(r["unsuccessful_previous_repairs"]),
-                    safety_warnings=json.loads(r["safety_warnings"]),
-                    created_at=r["created_at"],
+            investigations = []
+            for r in inv_rows:
+                conflict_data = None
+                raw_out = r["raw_model_output"]
+                if raw_out:
+                    try:
+                        raw_dict = json.loads(raw_out)
+                        if "conflict_analysis" in raw_dict and raw_dict["conflict_analysis"]:
+                            conflict_data = RepairDecisionIntelligence.model_validate(raw_dict["conflict_analysis"])
+                    except Exception:
+                        pass
+
+                investigations.append(
+                    InvestigationResponse(
+                        id=r["id"],
+                        incident_id=r["incident_id"],
+                        diagnosis_hypothesis=r["diagnosis_hypothesis"],
+                        confidence=r["confidence"],
+                        recommended_diagnostic_steps=json.loads(r["recommended_diagnostic_steps"]),
+                        relevant_historical_incidents=json.loads(r["relevant_historical_incidents"]),
+                        supporting_evidence=json.loads(r["supporting_evidence"]),
+                        unsuccessful_previous_repairs=json.loads(r["unsuccessful_previous_repairs"]),
+                        safety_warnings=json.loads(r["safety_warnings"]),
+                        conflict_analysis=conflict_data,
+                        created_at=r["created_at"],
+                    )
                 )
-                for r in inv_rows
-            ]
 
             # Repairs
             cursor.execute("SELECT * FROM repairs WHERE incident_id = ? ORDER BY performed_at DESC", (incident_id,))
@@ -242,7 +256,15 @@ class InvestigationService:
                     verified_citations.append(citation)
             investigation_result["relevant_historical_incidents"] = verified_citations
 
-        # 5. Store investigation in SQLite
+        # 5. Conflicting Repair Intelligence & Decision Analysis
+        conflict_analysis = repair_conflict_service.analyze_conflicts(
+            incident=incident_dict,
+            historical_memories=historical_memories,
+            investigation_result=investigation_result,
+        )
+        investigation_result["conflict_analysis"] = conflict_analysis.model_dump()
+
+        # 6. Store investigation in SQLite
         inv_id = generate_id("INV")
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -287,6 +309,7 @@ class InvestigationService:
             supporting_evidence=investigation_result["supporting_evidence"],
             unsuccessful_previous_repairs=investigation_result["unsuccessful_previous_repairs"],
             safety_warnings=investigation_result["safety_warnings"],
+            conflict_analysis=conflict_analysis,
             created_at=now_iso,
         )
 
