@@ -14,7 +14,11 @@ from backend.models.incident import (
     VerifyOutcomeResponse,
     IncidentDetailResponse,
 )
-from backend.services.hindsight_service import hindsight_service
+from backend.services.hindsight_service import (
+    hindsight_service,
+    MemoryServiceError,
+    classify_hindsight_exception,
+)
 from backend.services.groq_service import groq_service
 
 logger = logging.getLogger(__name__)
@@ -198,7 +202,13 @@ class InvestigationService:
 
         # 1. Cross-machine historical search in Hindsight
         recall_query = f"{incident.equipment_type} {incident.symptoms}"
-        historical_memories = hindsight_service.recall_memories(query=recall_query, budget="low")
+        try:
+            historical_memories = hindsight_service.recall_memories(query=recall_query, budget="low")
+        except MemoryServiceError:
+            raise
+        except Exception as e:
+            logger.warning("Upstream memory recall failed: %s", str(e))
+            raise classify_hindsight_exception(e) from e
 
         # 2. Reflect on incident history
         reflect_query = (
@@ -387,7 +397,8 @@ class InvestigationService:
             )
             retained_flag = True
         except Exception as e:
-            logger.error("Failed to retain outcome into Hindsight: %s", str(e), exc_info=True)
+            status = getattr(e, "status", None)
+            logger.warning("Failed to retain outcome into Hindsight Cloud (status=%s). Verification recorded locally.", status)
             retained_flag = False
 
         new_status = "VERIFIED_SUCCESSFUL" if data.outcome_status == "SUCCESSFUL" else "VERIFIED_UNSUCCESSFUL"

@@ -18,6 +18,7 @@ export default function InvestigationResultsView({
   onOpenVerifyModal,
   allIncidents = [],
   onSelectIncident,
+  investigationError,
 }) {
   const [activeEvidence, setActiveEvidence] = useState(null);
   const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
@@ -272,6 +273,55 @@ export default function InvestigationResultsView({
             </div>
           </section>
         </header>
+
+        {/* Investigation Error Banner */}
+        {investigationError && investigationError.incidentId === incident?.id && (
+          <section className="rounded-xl bg-surface-container-high p-6 sm:p-7 border border-error/50 shadow-2xl relative overflow-hidden animate-in fade-in duration-200">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-error to-transparent"></div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-lg bg-error-container/40 text-error flex items-center justify-center border border-error/30 shrink-0 shadow-[0_0_16px_rgba(244,63,94,0.25)]">
+                  <span className="material-symbols-outlined text-[24px]">
+                    {investigationError.isMemoryUnavailable ? "cloud_off" : "error"}
+                  </span>
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-error/20 text-error border border-error/30 font-mono">
+                      {investigationError.errorCode || "SERVICE_UNAVAILABLE"}
+                    </span>
+                    <h3 className="text-sm font-bold text-on-surface">
+                      {investigationError.isMemoryUnavailable
+                        ? "Historical Memory Service Temporarily Unavailable"
+                        : "AI Diagnostic Investigation Failed"}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mt-1.5 max-w-xl leading-relaxed">
+                    {investigationError.message}
+                  </p>
+                  <p className="text-[11px] text-outline font-mono mt-1">
+                    Telemetry, equipment specifications, and technician logs for{" "}
+                    <span className="text-on-surface font-semibold">{incident?.machine_id}</span> ({incident?.id}) remain safely intact.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  onClick={() => onInvestigateClick(incident?.id)}
+                  disabled={isInvestigating}
+                  type="button"
+                  className="px-4 py-2.5 rounded-lg bg-primary-container text-on-primary-container text-xs font-bold shadow-[0_0_16px_rgba(13,242,200,0.35)] hover:shadow-[0_0_24px_rgba(13,242,200,0.5)] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {isInvestigating ? "hourglass_top" : "refresh"}
+                  </span>
+                  <span>{isInvestigating ? "Retrying..." : "Retry Investigation"}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Investigation In-Progress or Trigger State */}
         {(!hasDiagnosis || isInvestigating) && (

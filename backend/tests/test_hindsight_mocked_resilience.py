@@ -68,7 +68,11 @@ def test_failed_memory_retrieval_empty_provenance(sample_incident):
 
 
 def test_http_402_payment_required_on_recall(sample_incident):
-    """Test behavior when Hindsight Cloud returns HTTP 402 Payment Required during memory recall."""
+    """
+    Test behavior when Hindsight Cloud returns HTTP 402 Payment Required during memory recall.
+    Must return HTTP 503 with structured error_code MEMORY_SERVICE_CREDITS_EXHAUSTED.
+    Must not expose keys or stack traces, and must not create an invalid investigation record.
+    """
     api_exc = ApiException(
         status=402,
         reason="Payment Required",
@@ -77,9 +81,79 @@ def test_http_402_payment_required_on_recall(sample_incident):
 
     with patch("backend.services.hindsight_service.hindsight_service.recall_memories", side_effect=api_exc):
         resp = client.post(f"/api/incidents/{sample_incident.id}/investigate")
-        # Currently, an uncaught recall error bubbles up as HTTP 500 with diagnostic failure detail
-        assert resp.status_code == 500
-        assert "Diagnostic investigation failed" in resp.json()["detail"]
+        assert resp.status_code == 503
+        data = resp.json()
+        assert "detail" in data
+        assert data["detail"]["error_code"] == "MEMORY_SERVICE_CREDITS_EXHAUSTED"
+        assert "temporarily unavailable" in data["detail"]["message"].lower()
+
+        # Check incident records in SQLite remain untouched
+        detail_resp = client.get(f"/api/incidents/{sample_incident.id}")
+        assert detail_resp.status_code == 200
+        assert len(detail_resp.json()["investigations"]) == 0
+
+
+def test_unexpected_hindsight_api_error_on_recall(sample_incident):
+    """
+    Test behavior when Hindsight Cloud returns a 502/503 gateway error or timeout.
+    Must return HTTP 503 with structured error_code MEMORY_SERVICE_UNAVAILABLE.
+    """
+    api_exc = ApiException(
+        status=503,
+        reason="Service Unavailable: Gateway timeout upstream",
+    )
+
+    with patch("backend.services.hindsight_service.hindsight_service.recall_memories", side_effect=api_exc):
+        resp = client.post(f"/api/incidents/{sample_incident.id}/investigate")
+        assert resp.status_code == 503
+        data = resp.json()
+        assert data["detail"]["error_code"] == "MEMORY_SERVICE_UNAVAILABLE"
+
+
+def test_failed_verification_without_repair(sample_incident):
+    """
+    Test that verifying an outcome before logging a repair action fails safely (HTTP 400).
+    """
+    ver_data = VerifyOutcomeCreate(
+        verified_by="LEAD-ENG-001",
+        outcome_status="SUCCESSFUL",
+        inspection_notes="Attempting premature verification.",
+    )
+    resp = client.post(f"/api/incidents/{sample_incident.id}/verify-outcome", json=ver_data.model_dump())
+    assert resp.status_code == 400
+    assert "No technician repair action has been recorded" in resp.json()["detail"]
+
+
+def test_failed_verification_status_conflict(sample_incident):
+    """
+    Test that conflicting verification statuses (SUCCESSFUL vs UNSUCCESSFUL) raise HTTP 409 Conflict.
+    """
+    # 1. Log repair
+    rep_data = RepairCreate(
+        technician_id="TECH-100",
+        action_taken="Replaced mechanical seal face.",
+    )
+    client.post(f"/api/incidents/{sample_incident.id}/repair", json=rep_data.model_dump())
+
+    # 2. Verify as SUCCESSFUL
+    ver_data1 = VerifyOutcomeCreate(
+        verified_by="TECH-100",
+        outcome_status="SUCCESSFUL",
+        inspection_notes="Initial test passed.",
+    )
+    with patch("backend.services.hindsight_service.hindsight_service.retain_incident_outcome", return_value={"status": "ok"}):
+        res1 = client.post(f"/api/incidents/{sample_incident.id}/verify-outcome", json=ver_data1.model_dump())
+        assert res1.status_code == 201
+
+    # 3. Attempt to verify as UNSUCCESSFUL -> 409 Conflict
+    ver_data2 = VerifyOutcomeCreate(
+        verified_by="TECH-200",
+        outcome_status="UNSUCCESSFUL",
+        inspection_notes="Attempting conflicting status.",
+    )
+    res2 = client.post(f"/api/incidents/{sample_incident.id}/verify-outcome", json=ver_data2.model_dump())
+    assert res2.status_code == 409
+    assert "already been verified as SUCCESSFUL" in res2.json()["detail"]
 
 
 def test_successful_verified_outcome_retention(sample_incident):
@@ -154,3 +228,27 @@ def test_failed_memory_retention_resilience_and_no_false_success(sample_incident
         assert detail_resp.status_code == 200
         ver_record = detail_resp.json()["verifications"][0]
         assert ver_record["hindsight_retained"] is False
+
+
+def test_hindsight_service_direct_classification_on_402():
+    """Test that direct calls to hindsight_service.recall_memories wrap 402 in MemoryServiceQuotaExhaustedError."""
+    from backend.services.hindsight_service import hindsight_service, MemoryServiceQuotaExhaustedError
+    mock_client = MagicMock()
+    mock_client.recall.side_effect = ApiException(status=402, reason="Payment Required")
+
+    with patch.object(hindsight_service, "get_client", return_value=mock_client):
+        with pytest.raises(MemoryServiceQuotaExhaustedError) as exc_info:
+            hindsight_service.recall_memories(query="test query")
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.error_code == "MEMORY_SERVICE_CREDITS_EXHAUSTED"
+
+
+def test_hindsight_service_reflect_graceful_on_error():
+    """Test that hindsight_service.reflect_on_incident returns None without crashing on API errors."""
+    from backend.services.hindsight_service import hindsight_service
+    mock_client = MagicMock()
+    mock_client.reflect.side_effect = ApiException(status=402, reason="Payment Required")
+
+    with patch.object(hindsight_service, "get_client", return_value=mock_client):
+        result = hindsight_service.reflect_on_incident(query="test query")
+        assert result is None

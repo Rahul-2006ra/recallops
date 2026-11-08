@@ -12,6 +12,7 @@ from backend.models.incident import (
     IncidentDetailResponse,
 )
 from backend.services.investigation_service import investigation_service, OutcomeConflictError
+from backend.services.hindsight_service import MemoryServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,30 @@ def investigate_incident(incident_id: str):
         return investigation_service.run_investigation(incident_id)
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
+    except MemoryServiceError as mse:
+        logger.warning(
+            "Memory service unavailable for incident %s: [%s] %s",
+            incident_id,
+            mse.error_code,
+            mse.message,
+        )
+        raise HTTPException(
+            status_code=mse.status_code,
+            detail={
+                "error_code": mse.error_code,
+                "message": mse.message,
+            },
+        )
     except Exception as e:
-        logger.error("Investigation failed for incident %s: %s", incident_id, str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Diagnostic investigation failed: {str(e)}")
+        status_code = getattr(e, "status", None)
+        logger.error("Investigation failed for incident %s (status=%s)", incident_id, status_code, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": "INTERNAL_INVESTIGATION_ERROR",
+                "message": "Diagnostic investigation encountered an internal error. Please retry shortly.",
+            },
+        )
 
 
 @router.post(

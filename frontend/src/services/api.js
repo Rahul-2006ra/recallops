@@ -18,15 +18,30 @@ function extractIncidentId(target) {
 async function handleResponse(response) {
   if (!response.ok) {
     let errorDetail = `Request failed with status ${response.status}`;
+    let parsedJson = null;
     try {
-      const errorJson = await response.json();
-      errorDetail = errorJson.detail || errorDetail;
+      parsedJson = await response.json();
+      errorDetail = parsedJson.detail || errorDetail;
     } catch {
       // fallback to status text
     }
-    const err = new Error(errorDetail);
+
+    const message =
+      typeof errorDetail === "string"
+        ? errorDetail
+        : errorDetail?.message || JSON.stringify(errorDetail);
+
+    const errorCode =
+      typeof errorDetail === "object"
+        ? errorDetail?.error_code
+        : typeof parsedJson?.detail === "object"
+        ? parsedJson.detail?.error_code
+        : undefined;
+
+    const err = new Error(message);
     err.status = response.status;
-    err.response = { status: response.status, data: { detail: errorDetail } };
+    err.errorCode = errorCode;
+    err.response = { status: response.status, data: parsedJson || { detail: errorDetail } };
     throw err;
   }
   return response.json();

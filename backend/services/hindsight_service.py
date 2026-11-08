@@ -8,6 +8,69 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 
+class MemoryServiceError(Exception):
+    """Base structured exception for Hindsight Cloud memory service operations."""
+    def __init__(
+        self,
+        message: str = "Historical memory service encountered an unexpected error.",
+        error_code: str = "MEMORY_SERVICE_ERROR",
+        status_code: int = 503,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+        self.status_code = status_code
+
+
+class MemoryServiceQuotaExhaustedError(MemoryServiceError):
+    """Raised when Hindsight Cloud returns HTTP 402 Payment Required (insufficient credits)."""
+    def __init__(
+        self,
+        message: str = (
+            "Historical memory retrieval is temporarily unavailable due to upstream credit quota limits. "
+            "Incident records and plant telemetry remain secure. Please retry once service credits are replenished."
+        ),
+    ):
+        super().__init__(
+            message=message,
+            error_code="MEMORY_SERVICE_CREDITS_EXHAUSTED",
+            status_code=503,
+        )
+
+
+class MemoryServiceUnavailableError(MemoryServiceError):
+    """Raised when Hindsight Cloud is unreachable or returns 502/503/504."""
+    def __init__(
+        self,
+        message: str = "Historical memory retrieval is temporarily unreachable. Please retry shortly.",
+    ):
+        super().__init__(
+            message=message,
+            error_code="MEMORY_SERVICE_UNAVAILABLE",
+            status_code=503,
+        )
+
+
+def classify_hindsight_exception(e: Exception) -> MemoryServiceError:
+    """Safely map any Hindsight API or network exception to a structured MemoryServiceError without leaking secrets."""
+    if isinstance(e, MemoryServiceError):
+        return e
+
+    status = getattr(e, "status", None)
+    err_str = str(e)
+
+    if status == 402 or "402" in err_str or "Payment Required" in err_str or "insufficient credits" in err_str.lower():
+        return MemoryServiceQuotaExhaustedError()
+    elif status in (502, 503, 504) or "timeout" in err_str.lower() or "connection" in err_str.lower():
+        return MemoryServiceUnavailableError()
+    else:
+        return MemoryServiceError(
+            message="Historical memory retrieval encountered an unexpected upstream error. Incident data remains secure.",
+            error_code="MEMORY_SERVICE_UNEXPECTED_ERROR",
+            status_code=503,
+        )
+
+
 class HindsightService:
     def __init__(self):
         self._local = threading.local()
@@ -49,8 +112,9 @@ class HindsightService:
             logger.info("Hindsight recall returned %d memory items.", len(results))
             return results
         except Exception as e:
-            logger.error("Hindsight recall error: %s", str(e), exc_info=True)
-            raise
+            status = getattr(e, "status", None)
+            logger.warning("Hindsight recall failed (status=%s). Classifying into structured MemoryServiceError.", status)
+            raise classify_hindsight_exception(e) from e
 
     def reflect_on_incident(self, query: str, budget: str = "low") -> Optional[str]:
         """Perform synthesis and diagnostic reflection over historical memory."""

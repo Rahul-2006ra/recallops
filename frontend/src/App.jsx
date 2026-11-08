@@ -46,6 +46,9 @@ export default function App() {
   // Notification Toast state
   const [toast, setToast] = useState(null);
 
+  // Investigation Error state
+  const [investigationError, setInvestigationError] = useState(null);
+
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => {
@@ -127,6 +130,8 @@ export default function App() {
     }
     if (incidentId) {
       loadIncidentDetails(incidentId);
+      // Clear investigation error when switching to another incident
+      setInvestigationError((prev) => (prev && prev.incidentId !== incidentId ? null : prev));
     }
   };
 
@@ -150,14 +155,31 @@ export default function App() {
     }
 
     setIsInvestigating(true);
+    setInvestigationError(null);
     try {
       await investigateIncident(id);
       showToast("Diagnostic investigation completed via Groq & Hindsight Cloud!", "success");
+      setInvestigationError(null);
       await fetchAllIncidents(id);
       await loadIncidentDetails(id);
     } catch (err) {
       console.error("Investigation error:", err);
-      showToast(err?.response?.data?.detail || "Investigation failed. Check backend logs.", "error");
+      const isMemoryUnavailable =
+        err?.status === 503 ||
+        err?.errorCode === "MEMORY_SERVICE_CREDITS_EXHAUSTED" ||
+        err?.errorCode === "MEMORY_SERVICE_UNAVAILABLE" ||
+        err?.errorCode === "MEMORY_SERVICE_UNEXPECTED_ERROR" ||
+        (err?.message && err.message.toLowerCase().includes("memory")) ||
+        (err?.message && err.message.toLowerCase().includes("hindsight"));
+
+      const userMessage = err?.message || "Diagnostic investigation failed. Check backend logs.";
+      setInvestigationError({
+        incidentId: id,
+        isMemoryUnavailable,
+        errorCode: err?.errorCode || (err?.status === 503 ? "MEMORY_SERVICE_UNAVAILABLE" : "INVESTIGATION_FAILED"),
+        message: userMessage,
+      });
+      showToast(userMessage, "error");
     } finally {
       setIsInvestigating(false);
     }
@@ -209,10 +231,21 @@ export default function App() {
   };
 
   const handleVerifySubmit = async (incidentId, payload) => {
-    await verifyOutcome(incidentId, payload);
-    showToast("Outcome verified & episodic memory retained in Hindsight Cloud!", "success");
-    await fetchAllIncidents(incidentId);
-    await loadIncidentDetails(incidentId);
+    try {
+      const res = await verifyOutcome(incidentId, payload);
+      if (res && res.hindsight_retained === true) {
+        showToast("Outcome verified and saved to Hindsight Cloud.", "success");
+      } else {
+        showToast("Outcome verified locally. Cloud memory was not saved.", "warning");
+      }
+      await fetchAllIncidents(incidentId);
+      await loadIncidentDetails(incidentId);
+      return res;
+    } catch (err) {
+      console.error("Verification error:", err);
+      showToast(err?.message || "Failed to verify repair outcome.", "error");
+      throw err;
+    }
   };
 
   return (
@@ -223,15 +256,21 @@ export default function App() {
           className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg shadow-2xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200 ${
             toast.type === "success"
               ? "bg-surface-container-high text-on-surface border-primary-container/40 shadow-[0_0_16px_rgba(13,242,200,0.25)]"
+              : toast.type === "warning"
+              ? "bg-surface-container-high text-on-surface border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.25)]"
               : "bg-surface-container-high text-error border-error/40 shadow-[0_0_16px_rgba(244,63,94,0.25)]"
           }`}
         >
           <span
             className={`material-symbols-outlined text-[18px] ${
-              toast.type === "success" ? "text-primary-container" : "text-error"
+              toast.type === "success"
+                ? "text-primary-container"
+                : toast.type === "warning"
+                ? "text-amber-400"
+                : "text-error"
             }`}
           >
-            {toast.type === "success" ? "check_circle" : "error"}
+            {toast.type === "success" ? "check_circle" : toast.type === "warning" ? "warning" : "error"}
           </span>
           <span>{toast.message}</span>
         </div>
@@ -290,6 +329,7 @@ export default function App() {
                 onOpenVerifyModal={handleOpenVerify}
                 allIncidents={incidents}
                 onSelectIncident={handleSelectIncident}
+                investigationError={investigationError}
               />
             )}
 
