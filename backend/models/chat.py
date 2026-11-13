@@ -73,6 +73,7 @@ class RecordOutcomeRequest(BaseModel):
     follow_up_metrics: Optional[dict[str, Any]] = None
     conversation_id: Optional[str] = None
     live_retain: Optional[bool] = False
+    idempotency_key: Optional[str] = None
 
 
 class RecordOutcomeResponse(BaseModel):
@@ -80,8 +81,10 @@ class RecordOutcomeResponse(BaseModel):
     incident_id: str
     verification_id: str
     hindsight_retained: bool
+    sync_status: str = "local_only"  # 'local_only' | 'pending_sync' | 'synced' | 'sync_failed'
     message: str
     document_id: Optional[str] = None
+    is_duplicate: bool = False
 
 
 class MemoryItemResponse(BaseModel):
@@ -98,6 +101,7 @@ class MemoryItemResponse(BaseModel):
     verified_at: str
     hindsight_retained: bool
     hindsight_document_id: Optional[str] = None
+    sync_status: Optional[str] = "local_only"
 
 
 class MemoryListResponse(BaseModel):

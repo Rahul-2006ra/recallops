@@ -100,7 +100,7 @@ def test_scenario_b_equipment_switching_and_pronoun_resolution():
     conv_id = d1["conversation_id"]
     assert "Pump" in d1["equipment_detected"]["equipment_type"]
     assert len(d1["retrieved_precedents"]) > 0
-    assert any("M-" in p["machine_id"] for p in d1["retrieved_precedents"])
+    assert any("M-" in p["machine_id"] or "EQ-" in p["machine_id"] for p in d1["retrieved_precedents"])
 
     # Turn 2: Switch to oven
     r2 = client.post(

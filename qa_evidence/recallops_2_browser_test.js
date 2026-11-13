@@ -20,6 +20,8 @@ async function runTest() {
     viewport: { width: 1280, height: 850 },
   });
   const page = await context.newPage();
+  page.on('console', msg => console.log('PAGE CONSOLE:', msg.text()));
+  page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
 
   const testResults = {
     stepsPassed: 0,
@@ -30,7 +32,19 @@ async function runTest() {
   try {
     // 1. Load Homepage / AI Assistant
     console.log('Step 1: Loading AI Assistant...');
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    const screenInit = path.join(SCREENSHOT_DIR, 'debug_initial.png');
+    await page.screenshot({ path: screenInit });
+    console.log('Current URL:', page.url());
+    console.log('Page Title:', await page.title());
+
+    // Check if New Chat button exists or wait for header
+    const newChatBtn = page.locator('button:has-text("New Chat")');
+    if (await newChatBtn.isVisible()) {
+      await newChatBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     await page.waitForSelector('text=What can I help you understand today?', { timeout: 15000 });
     const screen1 = path.join(SCREENSHOT_DIR, '2.0_01_assistant_landing.png');
     await page.screenshot({ path: screen1 });

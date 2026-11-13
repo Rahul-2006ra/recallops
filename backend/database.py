@@ -105,8 +105,30 @@ def init_db():
                 hindsight_retained INTEGER NOT NULL DEFAULT 0,
                 hindsight_document_id TEXT,
                 verified_at TEXT NOT NULL,
+                idempotency_key TEXT,
+                sync_status TEXT DEFAULT 'local_only',
+                sync_error TEXT,
                 FOREIGN KEY (incident_id) REFERENCES incidents (id) ON DELETE CASCADE
             );
+            """
+        )
+
+        # Ensure outcome_verifications has idempotency and sync columns
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        existing_cols = [row[1] for row in cursor.execute("PRAGMA table_info(outcome_verifications)").fetchall()]
+        if "idempotency_key" not in existing_cols:
+            cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN idempotency_key TEXT;")
+        if "sync_status" not in existing_cols:
+            cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN sync_status TEXT DEFAULT 'local_only';")
+        if "sync_error" not in existing_cols:
+            cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN sync_error TEXT;")
+
+        # Unique partial index enforcing strict idempotency for repair confirmation
+        cursor.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_outcome_idempotency_key 
+            ON outcome_verifications(idempotency_key) 
+            WHERE idempotency_key IS NOT NULL;
             """
         )
 

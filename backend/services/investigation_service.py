@@ -250,6 +250,8 @@ class InvestigationService:
             all_mem_text = " ".join(m.get("text", "") for m in historical_memories).upper()
             verified_citations = []
             for citation in investigation_result.get("relevant_historical_incidents", []):
+                if not citation or not isinstance(citation, str):
+                    continue
                 # Clean citation
                 words = [w for w in citation.upper().replace("-", " ").replace(":", " ").split() if len(w) >= 3]
                 if any(w in all_mem_text for w in words):

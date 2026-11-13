@@ -210,7 +210,8 @@ class ChatService:
                     v.id, v.incident_id, i.machine_id, i.equipment_type,
                     i.symptoms, r.action_taken, r.parts_replaced,
                     v.outcome_status, v.inspection_notes, v.verified_by,
-                    v.verified_at, v.hindsight_retained, v.hindsight_document_id
+                    v.verified_at, v.hindsight_retained, v.hindsight_document_id,
+                    v.sync_status
                 FROM outcome_verifications v
                 JOIN incidents i ON v.incident_id = i.id
                 LEFT JOIN repairs r ON v.incident_id = r.incident_id
@@ -288,6 +289,7 @@ class ChatService:
                     verified_at=r["verified_at"],
                     hindsight_retained=bool(r["hindsight_retained"]),
                     hindsight_document_id=r["hindsight_document_id"],
+                    sync_status=r["sync_status"] or "local_only",
                 )
             )
         return results
@@ -300,7 +302,8 @@ class ChatService:
                     v.id, v.incident_id, i.machine_id, i.equipment_type,
                     i.symptoms, r.action_taken, r.parts_replaced,
                     v.outcome_status, v.inspection_notes, v.verified_by,
-                    v.verified_at, v.hindsight_retained, v.hindsight_document_id
+                    v.verified_at, v.hindsight_retained, v.hindsight_document_id,
+                    v.sync_status
                 FROM outcome_verifications v
                 JOIN incidents i ON v.incident_id = i.id
                 LEFT JOIN repairs r ON v.incident_id = r.incident_id
@@ -325,6 +328,7 @@ class ChatService:
                 verified_at=r["verified_at"],
                 hindsight_retained=bool(r["hindsight_retained"]),
                 hindsight_document_id=r["hindsight_document_id"],
+                sync_status=r["sync_status"] or "local_only",
             )
 
     def retrieve_precedents(
@@ -539,12 +543,29 @@ class ChatService:
         ])
 
         # Outcome reporting
-        is_outcome_report = any(phrase in lower_msg for phrase in [
-            "replaced", "technician fixed", "technician replaced", "now working", "now it works",
-            "did not work", "failed to fix", "fixed it", "repaired by", "outcome was",
-            "problem resolved", "solved the issue", "didn't work", "still not working", "service technician",
-            "we replaced", "we changed"
-        ])
+        outcome_action_cues = [
+            "replaced", "technician fixed", "technician replaced", "technician cleaned", "technician serviced",
+            "technician adjusted", "technician aligned", "technician inspected", "technician repaired",
+            "cleaned cooling fins", "cleaned the cooling fins", "cleaned the fins", "cleaned fins",
+            "cooling fins cleaned", "now working", "now it works", "now the pump works", "works normally",
+            "working normally", "running normally", "runs normally", "did not work", "failed to fix",
+            "fixed it", "repaired by", "outcome was", "problem resolved", "solved the issue",
+            "didn't work", "still not working", "service technician", "we replaced", "we changed",
+            "we cleaned", "we fixed", "we swapped", "swapped the", "problem continued", "overheating continued", "vibration continued",
+            "still overheats", "it still overheats", "repair didn't work", "the repair didn't work",
+            "problem persisted", "issue persisted", "vibration persisted", "overheating persisted",
+            "still happening", "still overheating", "still vibrating", "still broken", "remained faulty"
+        ]
+        is_outcome_report = (
+            any(phrase in lower_msg for phrase in outcome_action_cues)
+            or (
+                any(w in lower_msg for w in ["technician", "mechanic", "engineer", "electrician", "maintenance", "crew", "team", "contractor"])
+                and any(w in lower_msg for w in ["cleaned", "replaced", "aligned", "fixed", "adjusted", "serviced", "swapped", "repaired", "tightened", "changed"])
+            )
+            or (
+                any(w in lower_msg for w in ["now works", "works normally", "works again", "problem continued", "issue persisted", "vibration persisted", "still overheats", "still vibrating", "didn't solve", "didn't work"])
+            )
+        )
 
         # Dedicated HISTORICAL_MEMORY_QUERY recognition
         # Handles variations: "Has this happened before?", "Have we seen this issue previously?",
@@ -672,9 +693,22 @@ class ChatService:
         # 7. Extract Outcome Facts with Grounding
         outcome_to_record: Optional[dict[str, Any]] = None
         if intent == "REPORT_OUTCOME":
-            is_success = not any(neg in lower_msg for neg in ["didn't work", "did not work", "failed", "unsuccessful", "still broken", "still not working", "failed to fix", "still faulty"])
+            failure_cues = [
+                "didn't work", "did not work", "failed", "unsuccessful", "still broken",
+                "still not working", "failed to fix", "still faulty", "problem continued",
+                "continued", "persisted", "issue persisted", "problem persisted",
+                "still overheats", "it still overheats", "still overheating", "still vibrating", "still vibrates",
+                "still loud", "still making noise", "no change", "didn't solve",
+                "did not solve", "repair didn't work", "the repair didn't work",
+                "still not fixed", "didn't help", "did not help", "without success",
+                "didn't fix", "did not fix", "remained faulty"
+            ]
+            is_success = not any(neg in lower_msg for neg in failure_cues)
             is_tech = any(w in lower_msg for w in ["technician", "electrician", "mechanic", "engineer", "service center", "service person"])
-            verif_status = "TECHNICIAN_CONFIRMED" if is_tech else "USER_REPORTED"
+            is_audit = any(w in lower_msg for w in ["certified audit", "iso audit", "lead engineer audit", "third party inspection", "independently verified"])
+            
+            verif_status = "INDEPENDENTLY_VERIFIED" if is_audit else "TECHNICIAN_CONFIRMED" if is_tech else "USER_REPORTED"
+            verif_source = "Certified Independent Audit" if is_audit else "Technician Field Report" if is_tech else "Operator Field Report"
             
             eq_name = active_equipment["equipment_type"] if active_equipment else "Industrial Equipment"
             
@@ -687,12 +721,18 @@ class ChatService:
                         original_symptoms = user_text[:120]
                         break
 
+            # Stable idempotency key for this detected outcome
+            clean_token = re.sub(r"\W+", "", raw_message[:20]).lower()
+            idempotency_key = f"IDEMP-{conv_id}-{clean_token}"
+
             outcome_to_record = {
                 "equipment_type": eq_name,
                 "symptoms": original_symptoms,
                 "action_taken": raw_message,
                 "outcome_status": "SUCCESSFUL" if is_success else "UNSUCCESSFUL",
                 "verification_status": verif_status,
+                "verification_source": verif_source,
+                "idempotency_key": idempotency_key,
                 "ready_to_save": True,
             }
 
@@ -862,7 +902,7 @@ class ChatService:
                 "Safety Alert:\n"
                 f"{device_safety_instruction}\n\n"
                 "Relevant Memory Insight:\n"
-                f"- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below for {active_eq_name}. Mention the machine ID (e.g. M-112 or EQ-FIELD) and state whether the repair SUCCEEDED or was UNSUCCESSFUL. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
+                f"- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below for {active_eq_name}. Mention the machine ID (e.g. M-112 or EQ-FIELD), what action was taken, and state whether the repair SUCCEEDED or was UNSUCCESSFUL. Clearly emphasize that the previous repair is historical evidence, not definitive proof of the current cause. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
                 "Question for Technician:\n"
                 "- Exactly 1 targeted, practical question the user can ask their certified maintenance technician.\n\n"
                 "CONSTRAINTS:\n"
@@ -897,12 +937,95 @@ class ChatService:
                 reply_text = completion.choices[0].message.content
             except Exception as e:
                 logger.error("Groq chat inference error: %s", e)
-                reply_text = (
-                    "**Diagnostic Assessment:**\n"
-                    "• Plausible Cause: Based on the reported symptoms, internal friction, mechanical misalignment, or power supply irregularities may be present.\n"
-                    "• Immediate Safety: Disconnect electrical power or isolate drive before physical inspection.\n"
-                    "• Next Step: Consult a certified maintenance technician to verify operating parameters."
-                )
+                # Calibrated structured fallback adhering to diagnostic response format
+                if intent == "CASUAL_GREETING":
+                    reply_text = (
+                        "Hello! I'm RecallOps, your equipment troubleshooting assistant. "
+                        "Describe an equipment issue—such as a pump, motor, or appliance—and I can help you understand plausible causes and verified repair history."
+                    )
+                elif intent == "ACKNOWLEDGMENT":
+                    reply_text = (
+                        "You're very welcome! I'm here anytime you need equipment troubleshooting, safety precautions, or verified repair history."
+                    )
+                elif intent == "REPORT_OUTCOME":
+                    outcome_label = "successful" if (outcome_to_record and outcome_to_record.get("outcome_status") == "SUCCESSFUL") else "unsuccessful"
+                    reply_text = (
+                        f"Thank you for reporting this repair outcome. The {outcome_label} resolution on your {active_eq_name} has been noted. "
+                        "Please verify the details in the confirmation panel below to record this in permanent plant memory."
+                    )
+                elif intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY"):
+                    if active_precedents:
+                        top_m = active_precedents[0]
+                        m_stat = getattr(top_m, "outcome_status", "")
+                        m_id = getattr(top_m, "machine_id", active_eq_name)
+                        m_act = getattr(top_m, "action_taken", "maintenance")
+                        status_str = "succeeded" if m_stat == "SUCCESSFUL" else "was unsuccessful"
+                        reply_text = (
+                            f"Past records for {m_id} show that {m_act} {status_str} for similar symptoms. "
+                            "Review the precedent records below for exact actions taken and recorded outcomes."
+                        )
+                    else:
+                        reply_text = f"No historical repair records matching these symptoms were found in memory for {active_eq_name}."
+                elif intent in ("FOLLOWUP_SIMPLIFY",):
+                    reply_text = (
+                        f"In simpler terms, parts inside the {active_eq_name} might be rubbing or off-balance, or dust and debris may be blocking airflow, making the unit run much hotter than normal."
+                    )
+                elif intent in ("FOLLOWUP_TECHNICIAN_QUESTIONS",):
+                    reply_text = (
+                        f"Here is what you can ask your technician: 'Could you measure the shaft alignment, verify bearing play, and inspect the cooling passages on this {active_eq_name}?'"
+                    )
+                elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_EXPLANATION", "FOLLOWUP_QUESTION", "FOLLOWUP_GENERAL") or is_followup:
+                    eq_lower = active_eq_name.lower()
+                    if "oven" in eq_lower:
+                        reply_text = (
+                            f"An {active_eq_name} often shuts off unexpectedly when a high-temperature thermal limit switch or failing thermostat sensor trips to prevent overheating, or if an electrical control relay cuts out under thermal load."
+                        )
+                    elif "motor" in eq_lower:
+                        reply_text = (
+                            f"An unusual sound in the {active_eq_name} commonly stems from dry or worn bearings, rotor-stator air gap misalignment, or loose mounting hardware vibrating under load."
+                        )
+                    elif "mixer" in eq_lower:
+                        reply_text = (
+                            f"The {active_eq_name} commonly stops when its overload protection switch trips, the motor carbon brushes wear out, or drive coupling friction causes a thermal shutdown."
+                        )
+                    else:
+                        reply_text = (
+                            f"This behavior on your {active_eq_name} typically arises from mechanical component wear, thermal boundary limits, or protective sensor circuits isolating the power drive."
+                        )
+                else:
+                    top_mem_summary = ""
+                    if active_precedents:
+                        top_m = active_precedents[0]
+                        m_stat = getattr(top_m, "outcome_status", "")
+                        m_id = getattr(top_m, "machine_id", active_eq_name)
+                        m_act = getattr(top_m, "action_taken", "maintenance")
+                        status_str = "SUCCEEDED" if m_stat == "SUCCESSFUL" else "was UNSUCCESSFUL"
+                        top_mem_summary = (
+                            f"In past records for {m_id}, {m_act} {status_str}. "
+                            "Note: Past repairs serve as historical evidence, not definitive proof for this incident."
+                        )
+                    else:
+                        top_mem_summary = f"No historical or previous repair records were found in memory for this {active_eq_name}."
+
+                    is_hh = active_equipment.get("category") in ("household", "electronic") if active_equipment else False
+                    safety_line = (
+                        "Unplug the appliance from the electrical outlet before inspecting filters or housings; never open live enclosures."
+                        if is_hh else
+                        "Perform full Lockout/Tagout (LOTO) at electrical disconnect and verify zero energy before physical inspection."
+                    )
+
+                    reply_text = (
+                        "Plausible Causes:\n"
+                        f"• Potential mechanical imbalance, misalignment, or bearing wear within the {active_eq_name}.\n"
+                        "• Blocked cooling passages, restricted airflow, or heat dissipation breakdown.\n"
+                        "• Loose mounting fasteners, coupling degradation, or excessive operational load.\n\n"
+                        "Safety Alert:\n"
+                        f"• {safety_line}\n\n"
+                        "Relevant Memory Insight:\n"
+                        f"• {top_mem_summary}\n\n"
+                        "Question for Technician:\n"
+                        f"• Could you check bearing runout, mechanical alignment, and cooling passage clearances on this {active_eq_name}?"
+                    )
 
         # 9. Adaptive Suggested Follow-Up Prompts
         suggested_followups = []
@@ -1002,14 +1125,41 @@ class ChatService:
         )
 
     def record_outcome(self, req: RecordOutcomeRequest) -> RecordOutcomeResponse:
-        """Record verified repair outcome into local SQLite database and optionally Hindsight Cloud."""
+        """Record verified repair outcome into local SQLite database and optionally Hindsight Cloud with strict idempotency."""
+        # 1. Idempotency Check: if idempotency_key is present and already exists, return existing record
+        if req.idempotency_key:
+            with get_db() as conn:
+                existing = conn.execute(
+                    """
+                    SELECT v.id as verification_id, v.incident_id, v.outcome_status,
+                           v.sync_status, v.hindsight_document_id, v.hindsight_retained
+                    FROM outcome_verifications v
+                    WHERE v.idempotency_key = ?
+                    LIMIT 1
+                    """,
+                    (req.idempotency_key,),
+                ).fetchone()
+
+                if existing:
+                    logger.info("Idempotent outcome submission detected for key '%s'", req.idempotency_key)
+                    return RecordOutcomeResponse(
+                        success=True,
+                        incident_id=existing["incident_id"],
+                        verification_id=existing["verification_id"],
+                        hindsight_retained=bool(existing["hindsight_retained"]),
+                        sync_status=existing["sync_status"] or "local_only",
+                        message="Repair outcome previously confirmed and recorded (idempotent submission).",
+                        document_id=existing["hindsight_document_id"],
+                        is_duplicate=True,
+                    )
+
         incident_id = generate_id("INC")
         repair_id = generate_id("REP")
         verification_id = generate_id("VER")
         now_iso = datetime.now(timezone.utc).isoformat()
         doc_id = f"OUTCOME-{incident_id}"
 
-        # 1. Insert into incidents table
+        # 2. Persist local incident first
         with get_db() as conn:
             conn.execute(
                 """
@@ -1032,7 +1182,7 @@ class ChatService:
                 ),
             )
 
-            # 2. Insert into repairs table
+            # 3. Persist local repair
             conn.execute(
                 """
                 INSERT INTO repairs (
@@ -1050,9 +1200,14 @@ class ChatService:
                 ),
             )
 
-        # 3. Handle Hindsight Retention (Strictly guarded by live_retain flag and config)
-        retained = False
+        # 4. Handle Reliable Hindsight Cloud Synchronization State
+        # States: 'local_only', 'pending_sync', 'synced', 'sync_failed'
+        hindsight_retained = False
+        sync_status = "local_only"
+        sync_error = None
+
         if req.live_retain and not settings.HINDSIGHT_MOCK_MODE:
+            sync_status = "pending_sync"
             try:
                 incident_dict = {
                     "id": incident_id,
@@ -1079,22 +1234,27 @@ class ChatService:
                     repair=repair_dict,
                     verification=verification_dict,
                 )
-                retained = True
+                hindsight_retained = True
+                sync_status = "synced"
             except Exception as e:
-                logger.warning("Live Hindsight retain error: %s. Saved locally.", e)
-                retained = False
+                logger.warning("Live Hindsight retain failed: %s. Local record preserved with sync_status='sync_failed'.", e)
+                hindsight_retained = False
+                sync_status = "sync_failed"
+                sync_error = str(e)[:250]
         else:
-            # Mock mode: marked as retained locally without spending credits
-            retained = True
+            # Mock mode or local-only: NEVER claim cloud retained
+            hindsight_retained = False
+            sync_status = "local_only"
 
-        # 4. Insert into outcome_verifications
+        # 5. Insert into outcome_verifications with idempotency_key, sync_status, sync_error
         with get_db() as conn:
             conn.execute(
                 """
                 INSERT INTO outcome_verifications (
                     id, incident_id, verified_by, outcome_status, inspection_notes,
-                    follow_up_metrics, hindsight_retained, hindsight_document_id, verified_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    follow_up_metrics, hindsight_retained, hindsight_document_id, verified_at,
+                    idempotency_key, sync_status, sync_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     verification_id,
@@ -1103,26 +1263,36 @@ class ChatService:
                     req.outcome_status,
                     req.inspection_notes or "Field repair completed and verified.",
                     json.dumps(req.follow_up_metrics) if req.follow_up_metrics else None,
-                    1 if retained else 0,
+                    1 if hindsight_retained else 0,
                     doc_id,
                     now_iso,
+                    req.idempotency_key,
+                    sync_status,
+                    sync_error,
                 ),
             )
 
-        # 5. If conversation_id is provided, post a confirmation message into the conversation
+        # 6. If conversation_id is provided, post a confirmation message into the conversation
         if req.conversation_id:
             asst_msg_id = generate_id("MSG-AST")
+            if sync_status == "synced":
+                sync_label = f"Saved locally and successfully synchronized with Hindsight Cloud (`{doc_id}`)."
+            elif sync_status == "sync_failed":
+                sync_label = f"Saved locally in plant database. Cloud sync failed ({sync_error or 'upstream unavailable'}). Sync status: `SYNC_FAILED`."
+            else:
+                sync_label = f"Saved to local episodic memory bank (`{doc_id}`). Credit-preservation mode active; no billable cloud credits consumed."
+
             msg_text = (
                 f"✅ **Verified Experience Recorded Successfully!**\n\n"
                 f"• **Equipment**: {req.equipment_type} ({req.machine_id or 'EQ-FIELD'})\n"
                 f"• **Repair Action**: {req.action_taken}\n"
                 f"• **Verified Outcome**: `{req.outcome_status}`\n"
-                f"• **Status**: Saved to permanent memory bank (`{doc_id}`). Subsequent troubleshooting queries will now reference this verified experience."
+                f"• **Status**: {sync_label}"
             )
             with get_db() as conn:
                 conn.execute(
                     "INSERT INTO messages (id, conversation_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (asst_msg_id, req.conversation_id, "assistant", msg_text, json.dumps({"type": "outcome_recorded", "incident_id": incident_id}), now_iso),
+                    (asst_msg_id, req.conversation_id, "assistant", msg_text, json.dumps({"type": "outcome_recorded", "incident_id": incident_id, "sync_status": sync_status}), now_iso),
                 )
                 conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now_iso, req.conversation_id))
 
@@ -1130,9 +1300,11 @@ class ChatService:
             success=True,
             incident_id=incident_id,
             verification_id=verification_id,
-            hindsight_retained=retained,
+            hindsight_retained=hindsight_retained,
+            sync_status=sync_status,
             message="Repair outcome recorded into episodic memory bank successfully.",
             document_id=doc_id,
+            is_duplicate=False,
         )
 
 

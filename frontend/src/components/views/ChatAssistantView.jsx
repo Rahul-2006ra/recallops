@@ -253,14 +253,29 @@ export default function ChatAssistantView({
         machine_id: "EQ-FIELD",
         conversation_id: activeConversationId || undefined,
         live_retain: !mockMemoryMode, // Guarded: only live if mock mode is turned off
+        idempotency_key: outcomeData.idempotency_key || `IDEMP-${msgId}`,
       });
+
+      let statusMsg = "Saved to Local Plant Memory";
+      if (result.sync_status === "synced") {
+        statusMsg = "Saved locally & synced to Hindsight Cloud";
+      } else if (result.sync_status === "sync_failed") {
+        statusMsg = "Saved locally (Cloud sync failed)";
+      } else {
+        statusMsg = "Saved to Local Episodic Memory (Demo Mode)";
+      }
 
       setSavedOutcomes((prev) => ({
         ...prev,
-        [msgId]: result.document_id || "OUTCOME-RECORDED",
+        [msgId]: `${statusMsg} (${result.document_id || "RECORDED"})`,
       }));
 
-      showToast?.("Repair experience saved to permanent episodic memory bank!", "success");
+      showToast?.(
+        result.is_duplicate
+          ? "Repair outcome previously confirmed (idempotent)."
+          : "Repair experience recorded successfully!",
+        "success"
+      );
     } catch (err) {
       console.error("Failed to save outcome:", err);
       showToast?.(err.message || "Failed to record repair outcome.", "error");
@@ -509,19 +524,21 @@ export default function ChatAssistantView({
                     {/* Outcome Recording Prompt Card */}
                     {outcomeToRecord && !isUser && (
                       <div className="mt-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-xs">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-emerald-800/40">
                           <span className="font-semibold text-emerald-300 flex items-center gap-1.5">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             Confirmed Field Repair Outcome Detected
                           </span>
-                          <span className="text-[10px] uppercase font-bold text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-900/80">
+                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${outcomeToRecord.outcome_status === "SUCCESSFUL" ? "bg-emerald-900/80 text-emerald-300" : "bg-amber-900/80 text-amber-300"}`}>
                             {outcomeToRecord.outcome_status}
                           </span>
                         </div>
-                        <div className="mb-2 space-y-0.5 text-[11px] text-slate-300">
+                        <div className="mb-2.5 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1 text-[11px] text-slate-300">
                           <p><strong className="text-slate-200">Equipment:</strong> {outcomeToRecord.equipment_type}</p>
-                          <p><strong className="text-slate-200">Action:</strong> {outcomeToRecord.action_taken}</p>
-                          <p><strong className="text-slate-200">Verification:</strong> {outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "USER REPORTED"}</p>
+                          <p><strong className="text-slate-200">Original Problem:</strong> {outcomeToRecord.symptoms || "Reported equipment issue from session"}</p>
+                          <p><strong className="text-slate-200">Repair Performed:</strong> {outcomeToRecord.action_taken}</p>
+                          <p><strong className="text-slate-200">Outcome:</strong> <span className={outcomeToRecord.outcome_status === "SUCCESSFUL" ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>{outcomeToRecord.outcome_status}</span></p>
+                          <p><strong className="text-slate-200">Verification Source:</strong> {outcomeToRecord.verification_source || (outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "Technician Field Report")}</p>
                         </div>
                         <p className="text-slate-400 mb-2.5 text-[11px]">
                           Would you like to store this verified resolution in RecallOps permanent memory for future fleet diagnostics?
@@ -529,7 +546,7 @@ export default function ChatAssistantView({
                         {isOutcomeSaved ? (
                           <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium py-1">
                             <Check className="w-4 h-4" />
-                            <span>Saved to Episodic Memory Bank ({savedOutcomes[msg.id]})</span>
+                            <span>{savedOutcomes[msg.id]}</span>
                           </div>
                         ) : (
                           <button
@@ -540,7 +557,7 @@ export default function ChatAssistantView({
                             {savingOutcomeId === msg.id ? (
                               <>
                                 <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                Retaining into Hindsight Memory...
+                                Storing verified outcome...
                               </>
                             ) : (
                               <>
