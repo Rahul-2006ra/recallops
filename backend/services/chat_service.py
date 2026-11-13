@@ -1654,14 +1654,14 @@ class ChatService:
         groq_messages: list[dict[str, str]] = []
         direct_reply: Optional[str] = None
 
-        multilingual_instruction = ""
-        if user_language and user_language != "English":
-            multilingual_instruction = (
-                f"\n\nMULTILINGUAL RESPONSE INSTRUCTION:\n"
-                f"The user is communicating in {user_language}. Respond naturally and fluently in {user_language} (matching their script and conversational dialect, e.g. Devanagari Hindi for Hindi, Kannada script for Kannada, or natural Latin Hinglish/Kannada-English if they used Latin alphabet).\n"
-                f"Keep technical terms (such as 'overload switch', 'capacitor', 'mixer grinder', 'motor', 'power plug', 'wiring', 'bearing', 'voltage') clear and recognizable in their standard technical terminology.\n"
-                f"Do NOT force the response into English unless the user explicitly requested English."
-            )
+        english_only_instruction = (
+            "\n\nCRITICAL LANGUAGE OUTPUT REQUIREMENT:\n"
+            "- The user may communicate in any language, including Hindi (Devanagari or Romanized), Kannada (Kannada script or Romanized), Tamil, Telugu, Hinglish, Kannada-English, or another regional Indian language.\n"
+            "- You must accurately comprehend the user's problem, equipment, symptoms, causes, and intent in whatever language they communicate.\n"
+            "- REGARDLESS OF THE USER'S INPUT LANGUAGE, YOU MUST ALWAYS GENERATE YOUR ENTIRE RESPONSE EXCLUSIVELY IN CLEAR, NATURAL ENGLISH.\n"
+            "- Do NOT respond in Hindi, Kannada, Hinglish, or any non-English script or language.\n"
+            "- All section headers ('Plausible Causes', 'Safety Alert', 'Relevant Memory Insight', 'Question for Technician'), explanations, safety instructions, and follow-up suggestions must be strictly in English."
+        )
 
         if intent == "CLARIFICATION_NEEDED":
             clarification_options = " or ".join(recent_equipments_discussed[:2]) if len(recent_equipments_discussed) >= 2 else "the equipment"
@@ -1674,7 +1674,7 @@ class ChatService:
                 "Respond warmly, naturally, and concisely (under 35 words). "
                 "Do NOT mention any previous machinery or equipment unless the user explicitly mentioned it in this turn. "
                 "Do NOT use troubleshooting section headers. Invite them to let you know whenever they have an equipment or device issue to diagnose."
-            ) + multilingual_instruction
+            ) + english_only_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -1686,7 +1686,7 @@ class ChatService:
                 "The user is asking an unrelated general knowledge, coding, or trivia question.\n"
                 "Politely and concisely explain that RecallOps specializes in equipment diagnostics and troubleshooting rather than general knowledge. "
                 "Keep your response under 45 words. Do NOT include troubleshooting section headers or fabricate equipment symptoms."
-            ) + multilingual_instruction
+            ) + english_only_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -1698,7 +1698,7 @@ class ChatService:
                 "You are RecallOps. The user is thanking or acknowledging you.\n"
                 "Respond warmly and briefly (under 30 words), letting them know you are here whenever they need equipment diagnostics "
                 "or verified repair advice. Do NOT include troubleshooting section headers."
-            )
+            ) + english_only_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -1710,7 +1710,7 @@ class ChatService:
                 "Provide a clear, educational explanation of the requested equipment concept in plain English. "
                 "Use 2 to 3 concise, readable bullet points or short paragraphs. "
                 "Do NOT include troubleshooting section headers. Keep response under 120 words."
-            )
+            ) + english_only_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -1726,7 +1726,7 @@ class ChatService:
                 "- Do NOT repeat the four troubleshooting section headers (Plausible Causes, Safety Alert, Relevant Memory Insight, Question for Technician).\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
                 "- Total response must be under 85 words."
-            )
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1742,7 +1742,7 @@ class ChatService:
                 "- Do NOT repeat the four troubleshooting section headers.\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
                 "- Total response must be under 85 words."
-            )
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1759,7 +1759,7 @@ class ChatService:
                 "- Do NOT repeat the four troubleshooting section headers.\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
                 "- Total response must be under 90 words."
-            )
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1778,7 +1778,7 @@ class ChatService:
                 "- NEVER invent or hallucinate machine IDs, repair actions, dates, or verification evidence.\n"
                 "- Do NOT generate 'Plausible Causes', 'Safety Alert', 'Relevant Memory Insight', or 'Question for Technician' sections.\n"
                 "- Keep the response direct, natural, and helpful."
-            )
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1793,7 +1793,7 @@ class ChatService:
                 "2. Briefly explain in plain English why this mechanical or electrical fix addressed (or failed to address) the underlying symptoms. Do NOT invent unstated test results or root causes.\n"
                 "3. Invite them to confirm storing this resolution in permanent plant memory for future fleet learning.\n"
                 "Do NOT repeat troubleshooting section headers. Keep response under 125 words."
-            ) + multilingual_instruction
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-4:]:
                 if m["role"] in ("user", "assistant"):
@@ -1814,7 +1814,7 @@ class ChatService:
                 "- Do NOT repeat troubleshooting section headers (Plausible Causes, Safety Alert, etc.).\n"
                 "- Relevant Memory Insight: If no matching historical repair records exist, you may concisely note that no prior repair incident was recorded for this issue. NEVER invent historical repair statistics or fabricate past repairs.\n"
                 "- Keep the response helpful, direct, and under 130 words."
-            ) + multilingual_instruction
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1835,7 +1835,7 @@ class ChatService:
                 system_instruction = (
                     f"You are RecallOps. The user is in an active troubleshooting session regarding their {prev_equipment['equipment_type']}.\n"
                     "Helpfully and concisely address their inquiry, reminding them how you can assist with their current equipment issue (inspecting symptoms, safety precautions, historical repair precedents), without repeating a full introductory monologue."
-                ) + multilingual_instruction
+                ) + english_only_instruction
                 groq_messages = [{"role": "system", "content": system_instruction}]
                 for m in conversation_history[-4:]:
                     if m["role"] in ("user", "assistant"):
@@ -1848,7 +1848,7 @@ class ChatService:
                     "Explain your capabilities warmly, clearly, and concisely (under 60 words).\n"
                     "Mention that users can describe equipment issues (such as pumps, motors, household appliances, electronics) to discover plausible causes, safety precautions, and historical repair precedents.\n"
                     "Do NOT include troubleshooting section headers."
-                ) + multilingual_instruction
+                ) + english_only_instruction
                 groq_messages = [
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": raw_message},
@@ -1889,14 +1889,7 @@ class ChatService:
                 "- Total response must be under 175 words.\n"
                 "- Never fabricate false machine IDs, dates, or outcomes.\n"
                 "- Do not use conversational filler or generic disclaimers."
-            )
-            if user_language and user_language != "English":
-                system_instruction += (
-                    f"\n\nMULTILINGUAL INSTRUCTION:\n"
-                    f"The user message is in {user_language}. Respond naturally and fluently in {user_language} (matching their script/dialect, e.g. Devanagari Hindi for Hindi, Kannada script for Kannada, or natural Latin Hinglish/Kannada-English).\n"
-                    f"Keep technical terms (like overload switch, capacitor, mixer grinder, motor, power plug, bearings, wiring) clear and identifiable in standard technical terminology.\n"
-                    f"Write all 4 sections ('Plausible Causes', 'Safety Alert', 'Relevant Memory Insight', 'Question for Technician') with their headers and content in {user_language}."
-                )
+            ) + english_only_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-4:]:
                 if m["role"] in ("user", "assistant"):
@@ -1916,7 +1909,7 @@ class ChatService:
             system_instruction = (
                 "You are RecallOps — an AI troubleshooting assistant specialized in machinery, household appliances, and electronics.\n"
                 "Respond warmly, helpfully, and concisely (under 50 words). Do NOT generate diagnostic section headers unless diagnosing a specific equipment problem."
-            )
+            ) + english_only_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -2046,8 +2039,8 @@ class ChatService:
                         )
                     elif any(k in lower_r for k in ["adapter", "switch off", "band tha", "off tha"]):
                         reply_text = (
-                            f"Arey bilkul, that explains it! Adapter ka switch off hone ki wajah se {active_eq_name} ko power supply nahi mil rahi thi. "
-                            "Switch on karte hi adapter power deliver karega aur device normally chalne lagega. Let me know if everything powers up fine!"
+                            f"That explains it! Because the adapter switch was turned off, your {active_eq_name} was not receiving power. "
+                            "Turning the switch on will deliver power so the device operates normally. Let me know if everything powers up fine!"
                         )
                     elif any(k in lower_r for k in ["battery", "charge", "charger"]):
                         reply_text = (
