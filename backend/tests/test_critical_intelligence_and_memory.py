@@ -380,3 +380,72 @@ def test_duplicate_confirmation_idempotency():
     assert r2.status_code == 200
     assert r2.json()["is_duplicate"] is True
     assert r2.json()["verification_id"] == r1.json()["verification_id"]
+
+
+# ==============================================================================
+# TEST GROUP D: COMPREHENSIVE BUG 1 INTENT PRECEDENCE & ARCHITECTURAL TESTS
+# ==============================================================================
+
+def test_intent_hi_recallops_and_variations():
+    """Verify 'Hi recallops', 'recallops hi', and 'namaste' receive clean greetings without LOTO or diagnosis."""
+    for greeting in ["Hi recallops", "recallops hi", "namaste", "kaise ho", "kya haal hai"]:
+        resp = client.post("/api/chat", json={"message": greeting, "mock_memory": True})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["intent"] in ("CASUAL_GREETING", "CASUAL_CONVERSATION")
+        assert data["retrieved_precedents"] == []
+        assert data["outcome_to_record"] is None
+        assert "Plausible Causes" not in data["reply"]
+        assert "Safety Alert" not in data["reply"]
+        assert "LOTO" not in data["reply"]
+        assert "Lockout" not in data["reply"]
+        assert "Question for Technician" not in data["reply"]
+
+
+def test_intent_general_capabilities_what_is_recallops():
+    """Verify capabilities queries receive helpful explanations without diagnostic sections."""
+    for q in ["what is recallops", "what can you do", "can you help me"]:
+        resp = client.post("/api/chat", json={"message": q, "mock_memory": True})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["intent"] in ("GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY", "CASUAL_CONVERSATION")
+        assert data["retrieved_precedents"] == []
+        assert "Plausible Causes" not in data["reply"]
+        assert "Safety Alert" not in data["reply"]
+        assert "RecallOps" in data["reply"] or "troubleshoot" in data["reply"].lower()
+
+
+def test_intent_unrelated_geography_and_politics():
+    """Verify general knowledge questions are politely redirected without equipment diagnosis."""
+    for q in ["What is the capital of India?", "Who is the Prime Minister of India?"]:
+        resp = client.post("/api/chat", json={"message": q, "mock_memory": True})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["intent"] == "UNRELATED_QUERY"
+        assert data["retrieved_precedents"] == []
+        assert "Plausible Causes" not in data["reply"]
+        assert "Safety Alert" not in data["reply"]
+
+
+def test_intent_ambiguous_standalone_query():
+    """Verify vague cries for help without equipment ask a clarifying question rather than guessing."""
+    resp = client.post("/api/chat", json={"message": "it's not working", "mock_memory": True})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["intent"] == "AMBIGUOUS_QUERY"
+    assert data["retrieved_precedents"] == []
+    assert "Plausible Causes" not in data["reply"]
+    assert "Safety Alert" not in data["reply"]
+    assert "specify" in data["reply"].lower() or "equipment" in data["reply"].lower() or "machine" in data["reply"].lower()
+
+
+def test_intent_unfamiliar_zentromax_machine_troubleshooting():
+    """Verify an unfamiliar machine name like ZentroMax is recognized and diagnosed properly."""
+    resp = client.post("/api/chat", json={"message": "My unfamiliar ZentroMax machine is vibrating", "mock_memory": True})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["intent"] == "TROUBLESHOOTING_QUERY"
+    assert data["equipment_detected"] is not None
+    assert "Zentromax" in data["equipment_detected"]["equipment_type"]
+    assert "Plausible Causes" in data["reply"]
+    assert "Safety Alert" in data["reply"]

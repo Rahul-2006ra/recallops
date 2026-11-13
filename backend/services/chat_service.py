@@ -108,7 +108,7 @@ def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
     lower = text.lower().strip()
     sorted_keywords = sorted(EQUIPMENT_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
     for kw, (eq_name, category) in sorted_keywords:
-        if re.search(r'\b' + re.escape(kw) + r'\b', lower) or kw in lower:
+        if re.search(r'\b' + re.escape(kw) + r'\b', lower):
             return {
                 "equipment_type": eq_name,
                 "category": category,
@@ -117,26 +117,46 @@ def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
 
     # Dynamic open-ended equipment extraction for phrasing like:
     # "my umbrella won't open", "the window is stuck", "our power bank is dead", "my electric bicycle"
-    # Must only match when accompanied by a problem indicator (not for follow-up questions)
+    # "My unfamiliar ZentroMax machine is vibrating", "hydraulic press unit is leaking"
     has_problem_indicator = any(w in lower for w in [
         "won't", "wont", "not working", "stopped", "stuck", "broken", "faulty", "creak", "creaking",
         "overheat", "vibrat", "leaking", "smoke", "dead", "shut off", "shuts off", "tripped", "failing",
         "making noise", "unusual noise", "grinding", "sparking", "blown", "not charging"
     ])
+
+    non_equipment_words = {
+        "technician", "problem", "fault", "issue", "question", "friend", "girlfriend", "boyfriend",
+        "day", "car", "name", "boss", "opinion", "screen", "repair", "idea", "thoughts",
+        "experience", "code", "work", "time", "meal", "food", "dinner", "lunch", "breakfast",
+        "head", "hand", "mind", "life", "first", "last", "other", "best", "worst", "python",
+        "capital", "france", "joke", "status", "outcome", "session", "springs", "spring",
+        "most likely", "likely", "most", "cause", "causes", "reason", "reasons", "happen",
+        "machine", "device", "equipment", "appliance", "unit", "system", "thing", "things",
+        "repair records", "past repair", "records", "history", "precedents", "help", "detail",
+        "this", "that", "these", "those", "each", "every", "some", "any", "unfamiliar"
+    }
+
+    # Pattern A: Specific machine/device phrasing like "ZentroMax machine", "hydraulic press unit"
+    m_mach = re.search(r'\b([a-zA-Z0-9_-]{3,})\s+(machine|device|unit|equipment|appliance)\b', lower)
+    if m_mach:
+        candidate_brand = m_mach.group(1).strip()
+        kind = m_mach.group(2).strip()
+        if candidate_brand not in non_equipment_words and not any(w in candidate_brand.split() for w in ["what", "how", "why", "when", "where", "who", "can", "explain", "that", "this"]):
+            formatted_name = f"{candidate_brand.title()} {kind.title()}"
+            cat = "electronic" if any(k in candidate_brand for k in ["battery", "charger", "power", "phone", "usb", "drone", "audio", "device", "led"]) else "industrial"
+            return {
+                "equipment_type": formatted_name,
+                "category": cat,
+                "matched_keyword": f"{candidate_brand} {kind}",
+            }
+
     if has_problem_indicator:
         m = re.search(r'\b(?:my|the|our)\s+([a-zA-Z]{3,}(?:\s+[a-zA-Z]{3,})?)\b', lower)
         if m:
             candidate = m.group(1).strip()
-            non_equipment_words = {
-                "technician", "problem", "fault", "issue", "question", "friend", "girlfriend", "boyfriend",
-                "day", "car", "name", "boss", "opinion", "screen", "repair", "idea", "thoughts",
-                "experience", "code", "work", "time", "meal", "food", "dinner", "lunch", "breakfast",
-                "head", "hand", "mind", "life", "first", "last", "other", "best", "worst", "python",
-                "capital", "france", "joke", "status", "outcome", "session", "springs", "spring",
-                "most likely", "likely", "most", "cause", "causes", "reason", "reasons", "happen",
-                "machine", "device", "equipment", "appliance", "unit", "system", "thing", "things",
-                "repair records", "past repair", "records", "history", "precedents", "help", "detail",
-            }
+            # If candidate starts with 'unfamiliar', strip it: e.g. "unfamiliar zentromax" -> "zentromax"
+            if candidate.startswith("unfamiliar "):
+                candidate = candidate[len("unfamiliar "):].strip()
             if candidate not in non_equipment_words and not any(w in candidate.split() for w in ["what", "how", "why", "when", "where", "who", "can", "explain", "that", "this", "most", "likely", "happen"]):
                 formatted_name = candidate.title()
                 cat = "electronic" if any(k in candidate for k in ["battery", "charger", "power", "phone", "usb", "drone", "audio", "device", "led"]) else "household"
@@ -440,50 +460,83 @@ class ChatService:
         Executes BEFORE memory retrieval and guarantees strict context isolation.
         """
         lower = raw_message.lower().strip()
+        words = re.findall(r'\b[a-zA-Z0-9_-]+\b', lower)
+        address_tokens = {
+            "recallops", "recall", "ops", "assistant", "bot", "ai", "there",
+            "friend", "bro", "bhai", "yaar", "ji", "sir", "madam", "dear", "agent"
+        }
+        stripped_words = [w for w in words if w not in address_tokens]
+        stripped_text = " ".join(stripped_words).strip()
 
         # 1. Casual social conversation, chitchat & greetings
         # Strict context isolation: Zero memory calls, zero diagnostic boilerplate
         casual_greetings = [
             "hello", "hi", "hey", "howdy", "greetings", "good morning",
-            "good afternoon", "good evening", "good night", "what's up", "whats up", "sup", "yo"
+            "good afternoon", "good evening", "good night", "what's up", "whats up",
+            "sup", "yo", "namaste", "namaskar", "pranam", "salaam", "salam",
+            "kaise ho", "kya haal hai", "kya haal", "subah bakhair", "ram ram"
         ]
-        is_greeting = any(
-            lower == g or lower.startswith(g + " ") or lower.startswith(g + "!") or lower.startswith(g + ",") or lower.startswith(g + ".")
-            for g in casual_greetings
+        is_greeting = (
+            stripped_text in casual_greetings
+            or any(stripped_text.startswith(g + " ") for g in casual_greetings)
+            or any(
+                lower == g or lower.startswith(g + " ") or lower.startswith(g + "!") or lower.startswith(g + ",") or lower.startswith(g + ".")
+                for g in casual_greetings
+            )
+            or any(lower.endswith(" " + g) for g in casual_greetings)
         )
 
         casual_social_patterns = [
             "how are you", "how are you doing", "how r u", "how are u", "how is it going",
             "how's it going", "hows it going", "how do you do", "hope you are well",
             "how's your day", "how is your day",
-            "what did you eat", "did you eat", "what's your favorite food", "what did you have for",
+            "what did you eat", "did you eat", "what's your favorite food", "what did you have for", "what do you eat",
             "do you have a girlfriend", "do you have a boyfriend", "are you single", "do you love me",
-            "marry me", "who is your crush",
+            "marry me", "who is your crush", "are you married",
             "what is your name", "what's your name", "who are you", "tell me about yourself",
             "who made you", "who created you", "who built you",
             "tell me a joke", "make me laugh", "say something funny",
-            "how is the weather", "what's the weather", "what is the weather"
+            "how is the weather", "what's the weather", "what is the weather",
+            "good to see you", "nice to meet you"
         ]
         is_social = any(phrase in lower for phrase in casual_social_patterns)
 
-        # 2. Unrelated general knowledge, programming, geography, trivia
+        # 2. General capabilities and help inquiry
+        capabilities_patterns = [
+            "what is recallops", "who is recallops", "what can you do", "what do you do",
+            "what can recallops do", "how can you help", "how can you help me", "can you help me",
+            "how does this work", "how does recallops work", "help me understand what you do",
+            "what are your features", "what are your capabilities", "tell me what you can do",
+            "what do you know", "how to use recallops", "what are you for", "who are you and what do you do"
+        ]
+        is_capabilities_query = (
+            any(phrase in lower for phrase in capabilities_patterns)
+            or stripped_text in ("help", "help me", "what can you do", "what do you do", "can you help")
+        )
+
+        # 3. Unrelated general knowledge, programming, geography, trivia, politics
         unrelated_patterns = [
             "what is python", "what is javascript", "what is java", "what is c++", "what is rust",
-            "how to write python", "how to code", "write a python", "write a function",
+            "how to write python", "how to code", "write a python", "write a function", "how to write code",
+            "what is react", "what is html", "what is css", "what is sql", "what is git",
             "what is the capital of france", "capital of france", "capital of germany", "capital of india",
-            "capital of italy", "capital of spain", "who was napoleon", "who was albert einstein",
-            "who is the president", "who won the world cup",
+            "capital of italy", "capital of spain", "capital of", "who was napoleon", "who was albert einstein",
+            "who is the president", "who is the prime minister", "who is prime minister",
+            "who won the world cup", "where is paris", "where is london", "where is tokyo",
             "how to bake a cake", "how to make pasta", "recipe for", "how to cook",
             "what is 2 + 2", "what is 2+2", "calculate ", "solve this equation",
             "what is photosynthesis", "why is the sky blue", "speed of light"
         ]
-        is_unrelated = any(p in lower for p in unrelated_patterns) or (
-            (lower.startswith("what is ") or lower.startswith("who is ") or lower.startswith("where is "))
-            and not any(eq in lower for eq in ["pump", "motor", "compressor", "oven", "mixer", "laptop", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor"])
-            and any(w in lower for w in ["python", "france", "paris", "europe", "math", "code", "programming", "capital", "president", "cake", "pasta", "recipe", "history"])
+        is_unrelated = (
+            any(p in lower for p in unrelated_patterns)
+            or (
+                (lower.startswith("what is ") or lower.startswith("who is ") or lower.startswith("where is ") or lower.startswith("when is ") or lower.startswith("how to "))
+                and not any(eq in lower for eq in ["pump", "motor", "compressor", "oven", "mixer", "laptop", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor", "machine", "device", "appliance", "equipment", "screen", "battery", "charger"])
+                and any(w in lower for w in ["python", "france", "paris", "europe", "math", "code", "programming", "capital", "president", "prime minister", "minister", "cake", "pasta", "recipe", "history", "delhi", "washington", "london", "tokyo", "asia", "america", "africa"])
+            )
         )
 
-        # 3. Gratitude / Acknowledgment
+        # 4. Gratitude / Acknowledgment
         acknowledgment_patterns = [
             "thank you", "thanks", "thx", "thank u", "appreciate it", "great thanks",
             "ok thanks", "got it", "perfect", "awesome", "understood", "okay thanks", "ok thank you"
@@ -493,7 +546,7 @@ class ChatService:
             for a in acknowledgment_patterns
         )
 
-        # 4. Repair Outcome Reporting (English + Hindi / Hinglish + Colloquial)
+        # 5. Repair Outcome Reporting (English + Hindi / Hinglish + Colloquial)
         outcome_action_cues = [
             "replaced", "technician fixed", "technician replaced", "technician cleaned", "technician serviced",
             "technician adjusted", "technician aligned", "technician inspected", "technician repaired",
@@ -528,7 +581,7 @@ class ChatService:
             )
         )
 
-        # 5. Historical Memory Inquiries
+        # 6. Historical Memory Inquiries
         hist_phrases = [
             "happened before", "happened previously", "seen this before", "seen this issue previously",
             "seen this problem", "have we seen this", "has this happened", "have we encountered",
@@ -551,7 +604,7 @@ class ChatService:
             )
         )
 
-        # 6. Follow-ups
+        # 7. Follow-ups
         is_simplify = any(phrase in lower for phrase in [
             "simpler words", "simpler terms", "explain that more simply", "explain more simply",
             "can you explain in simpler", "explain in simpler", "plain english", "too technical",
@@ -570,7 +623,7 @@ class ChatService:
             "can you elaborate", "could it be"
         ]) and not is_historical_memory_query
 
-        # 7. Concept queries
+        # 8. Concept queries
         is_concept_query = any(lower.startswith(p) for p in [
             "what is a ", "what is an ", "how does a ", "how does an ", "how does ", "define "
         ]) and any(w in lower for w in ["pump", "motor", "compressor", "oven", "mixer", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor"])
@@ -578,18 +631,50 @@ class ChatService:
         # Detect equipment directly in message
         detected_equipment = detect_equipment_entity(raw_message)
 
-        # Check for ambiguity
+        # Check for ambiguity cues in multi-turn
         has_ambiguity_cue = any(phrase in lower for phrase in ["which one", "both of them", "which machine", "either of them"])
 
-        # Final intent determination
+        # Check for ambiguous standalone cries for help without equipment
+        is_ambiguous_standalone = (
+            detected_equipment is None
+            and not is_greeting
+            and not is_social
+            and not is_capabilities_query
+            and not is_unrelated
+            and not is_acknowledgment
+            and not is_outcome_report
+            and not is_historical_memory_query
+            and not is_simplify
+            and not is_technician_question
+            and not is_why_or_how
+            and not is_concept_query
+            and any(phrase in lower for phrase in [
+                "it's not working", "it is not working", "it stopped", "something is broken",
+                "something is wrong", "help me fix it", "can you fix this", "it is broken",
+                "it won't work", "it doesn't work", "not working", "machine problem",
+                "equipment problem", "having an issue", "need help with this"
+            ])
+            and not any(eq in lower for eq in [
+                "pump", "motor", "compressor", "oven", "mixer", "fan", "laptop", "pc",
+                "umbrella", "window", "power bank", "bike", "bicycle", "door", "lock", "dishwasher",
+                "toaster", "kettle", "blender", "vacuum", "heater", "chiller", "boiler", "conveyor", "ac"
+            ])
+            and len(conversation_history) == 0
+        )
+
+        # Final intent determination with strict semantic precedence
         if is_social:
             intent = "CASUAL_CONVERSATION"
         elif is_greeting:
             intent = "CASUAL_GREETING"
+        elif is_capabilities_query:
+            intent = "GENERAL_CAPABILITIES_INQUIRY"
         elif is_unrelated:
             intent = "UNRELATED_QUERY"
         elif is_acknowledgment:
             intent = "ACKNOWLEDGMENT"
+        elif is_ambiguous_standalone:
+            intent = "AMBIGUOUS_QUERY"
         elif has_ambiguity_cue and len(conversation_history) > 1:
             intent = "CLARIFICATION_NEEDED"
         elif is_outcome_report:
@@ -607,7 +692,7 @@ class ChatService:
         elif detected_equipment or any(kw in lower for kw in ["problem", "broken", "issue", "fault", "not working", "won't", "stops", "stopped", "stalled", "vibrat", "overheat", "noise", "loud", "leak", "smoke", "creak", "creaking", "stuck"]):
             intent = "TROUBLESHOOTING_QUERY"
         else:
-            intent = "GENERAL_INQUIRY"
+            intent = "GENERAL_CAPABILITIES_INQUIRY"
 
         return {
             "intent": intent,
@@ -972,7 +1057,18 @@ class ChatService:
 
         is_followup_turn = intent.startswith("FOLLOWUP_") or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
 
-        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT"):
+        NON_EQUIPMENT_INTENTS = (
+            "CASUAL_CONVERSATION",
+            "CASUAL_GREETING",
+            "GENERAL_CAPABILITIES_INQUIRY",
+            "GENERAL_INQUIRY",
+            "UNRELATED_QUERY",
+            "ACKNOWLEDGMENT",
+            "AMBIGUOUS_QUERY",
+            "CLARIFICATION_NEEDED",
+        )
+
+        if intent in NON_EQUIPMENT_INTENTS:
             # STRICT ISOLATION: Zero context leakage from earlier machinery questions
             active_equipment = None
             detected_equipment = None
@@ -1002,7 +1098,7 @@ class ChatService:
             detected_equipment = None
 
         # 5. Safety Hazard Determination (suppressed for casual, unrelated, or history queries)
-        if active_equipment and intent not in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT", "HISTORICAL_MEMORY_QUERY"):
+        if active_equipment and intent not in NON_EQUIPMENT_INTENTS and intent not in ("HISTORICAL_MEMORY_QUERY",):
             category = active_equipment.get("category", "industrial")
             detected_hazard = self._get_device_appropriate_hazard(category, raw_message)
 
@@ -1010,7 +1106,7 @@ class ChatService:
         mock_mode = req.mock_memory if req.mock_memory is not None else settings.HINDSIGHT_MOCK_MODE
         active_precedents: list[PrecedentRecord] = []
 
-        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT", "CLARIFICATION_NEEDED"):
+        if intent in NON_EQUIPMENT_INTENTS:
             # ZERO MEMORY CALLS: Do not query local database or Hindsight Cloud
             active_precedents = []
             retrieved_precedents_for_response = []
@@ -1301,7 +1397,25 @@ class ChatService:
                     groq_messages.append({"role": m["role"], "content": m["content"]})
             groq_messages.append({"role": "user", "content": f"USER REPORT: \"{raw_message}\"\n{precedent_text}\nProvide your concise response acknowledging the repair outcome."})
 
-        else:
+        elif intent in ("GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
+            system_instruction = (
+                "You are RecallOps — an AI troubleshooting assistant specialized in diagnosing machinery, household appliances, and electronics using verified repair history.\n"
+                "The user is asking what RecallOps is, what you can do, or requesting assistance.\n"
+                "Explain your capabilities warmly, clearly, and concisely (under 60 words).\n"
+                "Mention that users can describe equipment issues (such as pumps, motors, household appliances, electronics) to discover plausible causes, safety precautions, and historical repair precedents.\n"
+                "Do NOT include troubleshooting section headers."
+            )
+            groq_messages = [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": raw_message},
+            ]
+
+        elif intent == "AMBIGUOUS_QUERY":
+            direct_reply = (
+                "I'd be glad to help you troubleshoot! Could you please specify which equipment, appliance, or machine you are working with (such as an industrial pump, electric motor, laptop, or dishwasher) and describe the symptoms you are observing?"
+            )
+
+        elif intent == "TROUBLESHOOTING_QUERY":
             # Standard Troubleshooting Query
             is_household = active_equipment.get("category") in ("household", "electronic") if active_equipment else False
             device_safety_instruction = (
@@ -1345,6 +1459,17 @@ class ChatService:
             )
             groq_messages.append({"role": "user", "content": groq_user_prompt})
 
+        else:
+            # Fallback general query
+            system_instruction = (
+                "You are RecallOps — an AI troubleshooting assistant specialized in machinery, household appliances, and electronics.\n"
+                "Respond warmly, helpfully, and concisely (under 50 words). Do NOT generate diagnostic section headers unless diagnosing a specific equipment problem."
+            )
+            groq_messages = [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": raw_message},
+            ]
+
         if direct_reply:
             reply_text = direct_reply
         else:
@@ -1382,13 +1507,21 @@ class ChatService:
                         reply_text = (
                             "Hello! I'm RecallOps, your equipment troubleshooting assistant. Let me know if you have an appliance, tool, or industrial machine you'd like help diagnosing!"
                         )
+                elif intent in ("GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
+                    reply_text = (
+                        "I am RecallOps, an AI assistant specialized in diagnosing machinery, household appliances, and electronics using verified repair history. You can ask me to troubleshoot equipment problems—such as a vibrating industrial pump, an overheating electric motor, or a broken household appliance—and I will analyze plausible causes and historical repair precedents."
+                    )
+                elif intent == "AMBIGUOUS_QUERY":
+                    reply_text = (
+                        "I'd be glad to help you troubleshoot! Could you please specify which equipment, appliance, or machine you are working with (such as a pump, motor, laptop, or dishwasher) and describe the symptoms you are observing?"
+                    )
                 elif intent == "UNRELATED_QUERY":
                     lower_r = raw_message.lower()
                     if any(w in lower_r for w in ["python", "javascript", "code", "programming", "software"]):
                         reply_text = (
                             "RecallOps is a specialized troubleshooting assistant for machinery, appliances, and hardware devices. I don't provide software programming help, but if you have equipment or hardware issues to diagnose, I'm glad to assist!"
                         )
-                    elif any(w in lower_r for w in ["capital", "france", "paris", "geography", "country"]):
+                    elif any(w in lower_r for w in ["capital", "france", "paris", "geography", "country", "india"]):
                         reply_text = (
                             "RecallOps specializes in equipment diagnostics and learning from verified repair history. I don't answer general geography or trivia questions, but feel free to describe any equipment malfunction or repair issue you need help with!"
                         )
@@ -1445,7 +1578,7 @@ class ChatService:
                         reply_text = (
                             f"This behavior on your {active_eq_name} typically arises from mechanical component wear, thermal boundary limits, or protective sensor circuits isolating the power drive."
                         )
-                else:
+                elif intent == "TROUBLESHOOTING_QUERY":
                     top_mem_summary = ""
                     if active_precedents:
                         top_m = active_precedents[0]
@@ -1479,14 +1612,24 @@ class ChatService:
                         "Question for Technician:\n"
                         f"• Could you check bearing runout, mechanical alignment, and cooling passage clearances on this {active_eq_name}?"
                     )
+                else:
+                    reply_text = (
+                        "I am RecallOps, your equipment troubleshooting assistant. Please describe the equipment, appliance, or machine you'd like help diagnosing, along with the symptoms you're seeing."
+                    )
 
         # 9. Adaptive Suggested Follow-Up Prompts
         suggested_followups = []
-        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING"):
+        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
             suggested_followups = [
                 "My industrial pump is vibrating and overheating.",
                 "My electric motor is making an unusual noise.",
                 "My umbrella won't open.",
+            ]
+        elif intent == "AMBIGUOUS_QUERY":
+            suggested_followups = [
+                "My industrial pump is vibrating and overheating.",
+                "My ceiling fan makes a clicking noise.",
+                "My microwave won't heat food.",
             ]
         elif intent == "UNRELATED_QUERY":
             suggested_followups = [
