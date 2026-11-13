@@ -119,3 +119,16 @@ def get_system_status():
         "hindsight_mock_mode": settings.HINDSIGHT_MOCK_MODE,
         "credit_preservation_active": True,
     }
+
+
+@router.post("/chat/sync-outcome/{verification_id}", summary="Retry syncing outcome to Hindsight Cloud")
+def retry_sync_outcome(verification_id: str):
+    """Retry synchronizing a locally recorded repair outcome with Hindsight Cloud."""
+    try:
+        return chat_service.retry_sync_outcome(verification_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to retry sync for verification %s: %s", verification_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to synchronize record with Hindsight Cloud.")
+

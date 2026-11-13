@@ -57,6 +57,8 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "motor": ("Electric Induction Motor", "industrial"),
     "compressor": ("Reciprocating Air Compressor", "industrial"),
     "generator": ("Backup Diesel Generator", "industrial"),
+    "microwave oven": ("Microwave Oven", "household"),
+    "microwave": ("Microwave Oven", "household"),
     "oven": ("Commercial Convection Oven", "household"),
     "mixer": ("Commercial Mixer Grinder", "household"),
     "grinder": ("Commercial Mixer Grinder", "household"),
@@ -64,6 +66,8 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "computer": ("Industrial Panel PC", "electronic"),
     "refrigerator": ("Commercial Refrigerator", "household"),
     "fridge": ("Commercial Refrigerator", "household"),
+    "boiler": ("Industrial Boiler", "industrial"),
+    "conveyor": ("Belt Conveyor System", "industrial"),
     "press": ("Hydraulic Stamping Press", "industrial"),
 }
 
@@ -348,16 +352,49 @@ class ChatService:
                 for item in recalled:
                     text = item.get("text", "")
                     doc_id = item.get("document_id") or "HINDSIGHT-DOC"
-                    outcome_status = "SUCCESSFUL" if "SUCCESSFUL" in text.upper() and "UNSUCCESSFUL" not in text.upper() else "UNSUCCESSFUL" if "UNSUCCESSFUL" in text.upper() else "SUCCESSFUL"
+
+                    # 1. Parse structured fields from retained document if present
+                    m_mid = re.search(r'Machine ID:\s*([^\n]+)', text, re.IGNORECASE)
+                    parsed_machine_id = m_mid.group(1).strip() if m_mid else doc_id.replace("OUTCOME-", "").replace("HACKATHON-VERIFIED-", "")
+
+                    m_eq = re.search(r'Equipment Type:\s*([^\n]+)', text, re.IGNORECASE)
+                    parsed_eq = m_eq.group(1).strip() if m_eq else (equipment_type or "Industrial Equipment")
+
+                    # 2. Strict Cross-Equipment Isolation Check
+                    # Disallow pump records leaking into laptops, ovens, or mismatched equipment
+                    if equipment_type and parsed_eq:
+                        eq_tokens = [t for t in re.split(r'\W+', equipment_type.lower()) if len(t) >= 4]
+                        mem_tokens = [t for t in re.split(r'\W+', parsed_eq.lower()) if len(t) >= 4]
+                        if eq_tokens and mem_tokens and not any(t in mem_tokens for t in eq_tokens) and not any(t in eq_tokens for t in mem_tokens):
+                            logger.info("Prevented cross-equipment contamination: dropped memory for '%s' during '%s' query", parsed_eq, equipment_type)
+                            continue
+
+                    m_act = re.search(r'Repair Action:\s*([^\n]+)', text, re.IGNORECASE)
+                    parsed_action = m_act.group(1).strip() if m_act else "Verified repair action from Hindsight Cloud"
+
+                    m_sym = re.search(r'Reported Symptoms:\s*([^\n]+)', text, re.IGNORECASE)
+                    parsed_symptoms = m_sym.group(1).strip() if m_sym else query
+
+                    m_out = re.search(r'Verified Outcome:\s*([^\n]+)', text, re.IGNORECASE)
+                    if m_out:
+                        raw_o = m_out.group(1).strip().upper()
+                        outcome_status = "UNSUCCESSFUL" if "UNSUCCESSFUL" in raw_o else "SUCCESSFUL"
+                    else:
+                        outcome_status = "UNSUCCESSFUL" if "UNSUCCESSFUL" in text.upper() else "SUCCESSFUL"
+
+                    m_notes = re.search(r'Inspection Notes:\s*([^\n]+)', text, re.IGNORECASE)
+                    parsed_notes = m_notes.group(1).strip() if m_notes else text[:250]
+
                     precedents.append(
                         PrecedentRecord(
                             id=doc_id,
-                            machine_id=doc_id.replace("OUTCOME-", "").replace("HACKATHON-VERIFIED-", ""),
-                            equipment_type=equipment_type or "Industrial Equipment",
-                            symptoms=query,
-                            action_taken="Retrieved from live Hindsight Cloud episodic bank",
+                            machine_id=parsed_machine_id,
+                            equipment_type=parsed_eq,
+                            symptoms=parsed_symptoms,
+                            action_taken=parsed_action,
                             outcome_status=outcome_status,
-                            inspection_notes=text[:250],
+                            verification_status="TECHNICIAN_CONFIRMED",
+                            inspection_notes=parsed_notes,
                             verified_at=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                             relevance_reason="Live semantic recall from Hindsight Cloud long-term memory bank.",
                             source="hindsight_cloud_live",
@@ -721,6 +758,24 @@ class ChatService:
                         original_symptoms = user_text[:120]
                         break
 
+            # Extract specific action phrase from message if pattern matches
+            action_phrase = raw_message
+            m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(cleaned[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            if not m_act_clean:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(replaced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            if not m_act_clean:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(swapped[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            if not m_act_clean:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(repaired[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            if not m_act_clean:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(serviced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            if not m_act_clean:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(cleared[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+            
+            if m_act_clean:
+                action_phrase = m_act_clean.group(1).strip()
+                action_phrase = action_phrase[0].upper() + action_phrase[1:]
+
             # Stable idempotency key for this detected outcome
             clean_token = re.sub(r"\W+", "", raw_message[:20]).lower()
             idempotency_key = f"IDEMP-{conv_id}-{clean_token}"
@@ -728,7 +783,7 @@ class ChatService:
             outcome_to_record = {
                 "equipment_type": eq_name,
                 "symptoms": original_symptoms,
-                "action_taken": raw_message,
+                "action_taken": action_phrase,
                 "outcome_status": "SUCCESSFUL" if is_success else "UNSUCCESSFUL",
                 "verification_status": verif_status,
                 "verification_source": verif_source,
@@ -1306,6 +1361,94 @@ class ChatService:
             document_id=doc_id,
             is_duplicate=False,
         )
+
+    def retry_sync_outcome(self, verification_id: str) -> dict[str, Any]:
+        """Retry syncing a locally saved outcome to Hindsight Cloud without creating duplicate local rows."""
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT v.id, v.incident_id, v.outcome_status, v.inspection_notes,
+                       v.follow_up_metrics, v.hindsight_document_id, v.sync_status,
+                       i.machine_id, i.equipment_type, i.symptoms,
+                       r.action_taken, r.parts_replaced, r.technician_id
+                FROM outcome_verifications v
+                JOIN incidents i ON v.incident_id = i.id
+                LEFT JOIN repairs r ON v.incident_id = r.incident_id
+                WHERE v.id = ?
+                LIMIT 1
+                """,
+                (verification_id,),
+            ).fetchone()
+
+        if not row:
+            raise ValueError(f"Outcome verification '{verification_id}' not found.")
+
+        if row["sync_status"] == "synced":
+            return {
+                "success": True,
+                "sync_status": "synced",
+                "message": "Record is already synchronized with Hindsight Cloud.",
+                "document_id": row["hindsight_document_id"],
+            }
+
+        if settings.HINDSIGHT_MOCK_MODE:
+            return {
+                "success": True,
+                "sync_status": "local_only",
+                "message": "Credit-preservation mock mode is active; cloud sync is simulated locally.",
+                "document_id": row["hindsight_document_id"],
+            }
+
+        try:
+            incident_dict = {
+                "id": row["incident_id"],
+                "machine_id": row["machine_id"],
+                "equipment_type": row["equipment_type"],
+                "symptoms": row["symptoms"],
+                "severity": "MEDIUM",
+                "reported_observations": row["symptoms"],
+                "is_demo": True,
+            }
+            repair_dict = {
+                "technician_id": row["technician_id"] or "TECH-FIELD",
+                "action_taken": row["action_taken"] or "Maintenance action",
+                "parts_replaced": row["parts_replaced"] or "None",
+            }
+            verification_dict = {
+                "outcome_status": row["outcome_status"],
+                "inspection_notes": row["inspection_notes"] or "Field verified",
+                "follow_up_metrics": json.loads(row["follow_up_metrics"]) if row["follow_up_metrics"] else None,
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }
+            hindsight_service.retain_incident_outcome(
+                incident=incident_dict,
+                repair=repair_dict,
+                verification=verification_dict,
+            )
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE outcome_verifications SET sync_status = 'synced', hindsight_retained = 1, sync_error = NULL WHERE id = ?",
+                    (verification_id,),
+                )
+            return {
+                "success": True,
+                "sync_status": "synced",
+                "message": "Successfully synchronized with Hindsight Cloud.",
+                "document_id": row["hindsight_document_id"],
+            }
+        except Exception as e:
+            err_msg = str(e)[:250]
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE outcome_verifications SET sync_status = 'sync_failed', sync_error = ? WHERE id = ?",
+                    (err_msg, verification_id),
+                )
+            return {
+                "success": False,
+                "sync_status": "sync_failed",
+                "message": f"Sync retry failed: {err_msg}",
+                "document_id": row["hindsight_document_id"],
+            }
 
 
 chat_service = ChatService()

@@ -32,9 +32,8 @@ async function runTest() {
   try {
     // 1. Load Homepage / AI Assistant
     console.log('Step 1: Loading AI Assistant...');
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30000 });
-    const screenInit = path.join(SCREENSHOT_DIR, 'debug_initial.png');
-    await page.screenshot({ path: screenInit });
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(1000);
     console.log('Current URL:', page.url());
     console.log('Page Title:', await page.title());
 

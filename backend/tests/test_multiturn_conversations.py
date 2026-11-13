@@ -399,7 +399,7 @@ def test_scenario_exact_pump_historical_memory_four_turns():
     # 3. Displays relevant historical precedent cards
     assert len(d4["retrieved_precedents"]) > 0
     prec_ids = [p["machine_id"] for p in d4["retrieved_precedents"]]
-    assert any("M-" in mid for mid in prec_ids)
+    assert any("M-" in mid or "EQ-" in mid for mid in prec_ids)
 
     # 4. Distinguishes successful vs unsuccessful precedents
     statuses = [p["outcome_status"] for p in d4["retrieved_precedents"]]

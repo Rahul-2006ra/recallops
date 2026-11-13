@@ -25,14 +25,14 @@ class Settings:
     )
 
     # Groq AI
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
     # Hindsight Cloud
-    HINDSIGHT_API_KEY: str = os.getenv("HINDSIGHT_API_KEY", "")
-    HINDSIGHT_BASE_URL: str = os.getenv("HINDSIGHT_BASE_URL", "https://api.hindsight.vectorize.io")
-    HINDSIGHT_BANK_ID: str = os.getenv("HINDSIGHT_BANK_ID", "recallops-demo")
-    HINDSIGHT_MOCK_MODE: bool = os.getenv("HINDSIGHT_MOCK_MODE", "false").lower() in ("true", "1", "yes")
+    HINDSIGHT_API_KEY: str = os.getenv("HINDSIGHT_API_KEY", "").strip()
+    HINDSIGHT_BASE_URL: str = os.getenv("HINDSIGHT_BASE_URL", "https://api.hindsight.vectorize.io").strip()
+    HINDSIGHT_BANK_ID: str = os.getenv("HINDSIGHT_BANK_ID", "recallops-demo").strip()
+    HINDSIGHT_MOCK_MODE: bool = os.getenv("HINDSIGHT_MOCK_MODE", "true").lower() in ("true", "1", "yes")
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./recallops.db")
