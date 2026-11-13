@@ -59,6 +59,7 @@ class ChatResponse(BaseModel):
     retrieved_precedents: list[PrecedentRecord] = []
     outcome_to_record: Optional[dict[str, Any]] = None
     suggested_followups: list[str] = []
+    detected_language: Optional[str] = None
     created_at: str
 
 
@@ -109,3 +110,12 @@ class MemoryItemResponse(BaseModel):
 class MemoryListResponse(BaseModel):
     total: int
     memories: list[MemoryItemResponse]
+
+
+class TranscriptionResponse(BaseModel):
+    text: str
+    language: str
+    duration: float
+    model_used: Optional[str] = None
+    status: str = "success"
+

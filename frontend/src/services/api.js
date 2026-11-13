@@ -179,6 +179,24 @@ export async function getChatStatus() {
   return handleResponse(res);
 }
 
+// Speech-to-Text Transcription (Multilingual Groq Whisper)
+export async function transcribeAudio(audioBlob, language = null) {
+  const formData = new FormData();
+  const filename = audioBlob.type && audioBlob.type.includes("wav")
+    ? "recording.wav"
+    : audioBlob.type && (audioBlob.type.includes("mp4") || audioBlob.type.includes("m4a"))
+    ? "recording.m4a"
+    : "recording.webm";
+  formData.append("file", audioBlob, filename);
+
+  const query = language ? `?language=${encodeURIComponent(language)}` : "";
+  const res = await fetch(`${API_BASE}/api/transcribe${query}`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse(res);
+}
+
 export const api = {
   checkHealth,
   getHealth,
@@ -199,6 +217,8 @@ export const api = {
   listMemories,
   getMemoryDetails,
   getChatStatus,
+  transcribeAudio,
 };
 
 export default api;
+

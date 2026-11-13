@@ -62,6 +62,16 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "oven": ("Commercial Convection Oven", "household"),
     "mixer": ("Commercial Mixer Grinder", "household"),
     "grinder": ("Commercial Mixer Grinder", "household"),
+    "mixie": ("Commercial Mixer Grinder", "household"),
+    "mixy": ("Commercial Mixer Grinder", "household"),
+    "मिक्सी": ("Commercial Mixer Grinder", "household"),
+    "मिक्सर": ("Commercial Mixer Grinder", "household"),
+    "ಮಿಕ್ಸಿ": ("Commercial Mixer Grinder", "household"),
+    "ಮಿಕ್ಸರ್": ("Commercial Mixer Grinder", "household"),
+    "மிக்ஸி": ("Commercial Mixer Grinder", "household"),
+    "మిక్సీ": ("Commercial Mixer Grinder", "household"),
+    "मिक्सर ग्राइंडर": ("Commercial Mixer Grinder", "household"),
+
     "laptop": ("Workstation Laptop", "electronic"),
     "computer": ("Industrial Panel PC", "electronic"),
     "refrigerator": ("Commercial Refrigerator", "household"),
@@ -143,17 +153,81 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
 }
 
 
+def detect_indic_or_vernacular(text: str) -> bool:
+    """Detect if text contains Indic scripts or common Indian Romanized vernacular tokens."""
+    for ch in text:
+        cp = ord(ch)
+        if (0x0900 <= cp <= 0x0D7F) or (0x0600 <= cp <= 0x06FF):
+            return True
+    lower = text.lower()
+    vernacular_markers = {
+        "mera", "meri", "mere", "nanna", "namma", "namaste", "namaskara", "namaskar",
+        "vanakkam", "namaskaram", "aagta", "agta", "illa", "beku", "beda", "maduttilla",
+        "madalla", "kelsa", "pani", "nahi", "nahin", "raha", "rahi", "rahe", "khatam",
+        "band", "chalu", "thik", "theek", "kar", "karo", "kare", "karna", "aaye", "aaya",
+        "hua", "hui", "hue", "bhai", "yaar", "mixie", "mixy", "swalpa", "aytu", "irukku",
+        "pannala", "ledu", "undi", "cheyandi", "arre", "broo", "chala", "hota", "hoti"
+    }
+    words = set(re.findall(r'\b[a-zA-Z]+\b', lower))
+    return len(words.intersection(vernacular_markers)) >= 1
+
+
+def identify_script_or_vernacular_language(text: str) -> Optional[str]:
+    """Identify language from Unicode script or distinctive vernacular vocabulary."""
+    for ch in text:
+        cp = ord(ch)
+        if 0x0C80 <= cp <= 0x0CFF:
+            return "Kannada"
+        elif 0x0900 <= cp <= 0x097F:
+            return "Hindi"
+        elif 0x0B80 <= cp <= 0x0BFF:
+            return "Tamil"
+        elif 0x0C00 <= cp <= 0x0C7F:
+            return "Telugu"
+        elif 0x0D00 <= cp <= 0x0D7F:
+            return "Malayalam"
+        elif 0x0980 <= cp <= 0x09FF:
+            return "Bengali"
+        elif 0x0600 <= cp <= 0x06FF:
+            return "Urdu"
+
+    lower = text.lower()
+    words = set(re.findall(r'\b[a-zA-Z]+\b', lower))
+    kannada_tokens = {"nanna", "namma", "namaskara", "aagta", "agta", "illa", "beku", "beda", "maduttilla", "madalla", "kelsa", "swalpa", "aytu"}
+    hindi_tokens = {"mera", "meri", "mere", "nahi", "nahin", "raha", "rahi", "rahe", "khatam", "band", "chalu", "thik", "theek", "kar", "karo", "kare", "karna", "aaye", "aaya", "hua", "hui", "hue", "bhai", "yaar", "arre", "kaise", "kya", "haal", "accha"}
+    tamil_tokens = {"vanakkam", "irukku", "pannala"}
+    telugu_tokens = {"namaskaram", "ledu", "undi", "cheyandi", "chala"}
+
+    if words.intersection(kannada_tokens):
+        return "Kannada"
+    elif words.intersection(hindi_tokens):
+        return "Hindi"
+    elif words.intersection(tamil_tokens):
+        return "Tamil"
+    elif words.intersection(telugu_tokens):
+        return "Telugu"
+    return None
+
+
 def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
     """Detect equipment from explicit keywords or dynamic open-ended phrasing."""
     lower = text.lower().strip()
     sorted_keywords = sorted(EQUIPMENT_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
     for kw, (eq_name, category) in sorted_keywords:
-        if re.search(r'\b' + re.escape(kw) + r'\b', lower):
-            return {
-                "equipment_type": eq_name,
-                "category": category,
-                "matched_keyword": kw,
-            }
+        if any(ord(c) > 127 for c in kw):
+            if kw in lower:
+                return {
+                    "equipment_type": eq_name,
+                    "category": category,
+                    "matched_keyword": kw,
+                }
+        else:
+            if re.search(r'\b' + re.escape(kw) + r'\b', lower):
+                return {
+                    "equipment_type": eq_name,
+                    "category": category,
+                    "matched_keyword": kw,
+                }
 
     # Dynamic open-ended equipment extraction for phrasing like:
     # "my umbrella won't open", "the window is stuck", "our power bank is dead", "my electric bicycle"
@@ -163,8 +237,13 @@ def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
         "overheat", "vibrat", "leaking", "smoke", "dead", "shut off", "shuts off", "tripped", "failing",
         "making noise", "unusual noise", "grinding", "sparking", "blown", "not charging",
         "not on", "is not on", "won't turn on", "wont turn on", "won't start", "wont start", "doesn't turn on",
-        "does not turn on", "got over", "ran out", "empty", "no flame", "not lighting", "won't ignite", "no gas"
+        "does not turn on", "got over", "ran out", "empty", "no flame", "not lighting", "won't ignite", "no gas",
+        # Multilingual & Indian language problem indicators
+        "काम नहीं", "काम नही", "खराब", "बंद", "ಕೆಲಸ ಮಾಡುತ್ತಿಲ್ಲ", "ಕೆಲಸ ಮಾಡ್ತಿಲ್ಲ", "ಆಗ್ತಾ ಇಲ್ಲ", "ಅಗ್ತಾ ಇಲ್ಲ",
+        "ವೇಲೆ ಸೆಯ್ಯವಿಲ್ಲೈ", "పనిచేయడం లేదు", "work nahi", "work aagta illa", "kaam nahi", "chal nahi raha",
+        "band ho gaya", "chal nahi rahi", "chalu nahi", "kharab ho gaya"
     ])
+
 
     non_equipment_words = {
         "technician", "problem", "fault", "issue", "question", "friend", "girlfriend", "boyfriend",
@@ -521,7 +600,59 @@ class ChatService:
                 return True
         return False
 
+    def _classify_multilingual_intent_and_entity(
+        self,
+        raw_message: str,
+        conversation_history: list[dict],
+    ) -> Optional[dict[str, Any]]:
+        """
+        Multilingual semantic classifier powered by Groq LLM.
+        Understands regional Indian languages (Hindi, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Urdu, Hinglish, code-switching),
+        unfamiliar equipment, informal phrasing, and grammatical mistakes.
+        """
+        prompt = (
+            "You are a semantic analyzer for RecallOps equipment troubleshooting assistant.\n"
+            "Analyze the user message (which may be in English, Hindi, Kannada, Tamil, Telugu, Bengali, Marathi, Urdu, Hinglish, or code-switching) "
+            "and return a JSON object with EXACTLY these keys:\n"
+            "{\n"
+            '  "intent": "TROUBLESHOOTING_QUERY" | "PROBLEM_EXPLANATION_OR_CAUSE" | "REPORT_OUTCOME" | "CASUAL_GREETING" | "CASUAL_CONVERSATION" | "GENERAL_CAPABILITIES_INQUIRY" | "UNRELATED_QUERY" | "HISTORICAL_MEMORY_QUERY",\n'
+            '  "equipment": string or null (Standard English name of equipment, e.g. "Commercial Mixer Grinder", "Gas Stove", "Centrifugal Slurry Pump", "Workstation Laptop", "Television"),\n'
+            '  "category": "industrial" | "household" | "electronic" | null,\n'
+            '  "symptom": string or null (Brief English description of symptom or malfunction),\n'
+            '  "detected_language": string (e.g. "Hindi", "Kannada", "Hinglish", "Kannada-English", "Tamil", "Telugu", "English", "Urdu"),\n'
+            '  "is_equipment_troubleshooting": boolean\n'
+            "}\n"
+            "Return ONLY the valid JSON object, no markdown, no other text."
+        )
+
+        context_lines = []
+        if conversation_history:
+            for m in conversation_history[-3:]:
+                if m.get("role") in ("user", "assistant"):
+                    context_lines.append(f"{m['role'].upper()}: {m['content']}")
+
+        user_payload = f"USER MESSAGE: \"{raw_message}\""
+        if context_lines:
+            user_payload = "RECENT CONVERSATION CONTEXT:\n" + "\n".join(context_lines) + f"\n\nCURRENT USER MESSAGE: \"{raw_message}\""
+
+        try:
+            content, _ = groq_service.create_chat_completion(
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": user_payload}],
+                temperature=0.0,
+                max_tokens=300,
+                response_format={"type": "json_object"},
+            )
+            clean = content.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            parsed = json.loads(clean)
+            return parsed
+        except Exception as e:
+            logger.warning("Multilingual LLM classification failed: %s", e)
+            return None
+
     def classify_intent_and_entities(
+
         self,
         raw_message: str,
         conversation_history: list[dict],
@@ -865,6 +996,29 @@ class ChatService:
             and len(conversation_history) == 0
         )
 
+        # Multilingual semantic understanding (Hindi, Kannada, Tamil, Telugu, Hinglish, etc.)
+        script_lang = identify_script_or_vernacular_language(raw_message)
+        is_indic = detect_indic_or_vernacular(raw_message)
+        detected_language = script_lang or "English"
+        multilingual_parsed: Optional[dict[str, Any]] = None
+
+        if is_indic or (detected_equipment is None and not is_greeting and not is_social and not is_capabilities_query and not is_unrelated and not is_acknowledgment):
+            multilingual_parsed = self._classify_multilingual_intent_and_entity(raw_message, conversation_history)
+            if multilingual_parsed:
+                detected_language = multilingual_parsed.get("detected_language") or script_lang or ("Hindi" if is_indic else "English")
+                if multilingual_parsed.get("equipment") and not detected_equipment:
+                    detected_equipment = {
+                        "equipment_type": multilingual_parsed["equipment"],
+                        "category": multilingual_parsed.get("category", "household"),
+                        "matched_keyword": raw_message,
+                    }
+            elif script_lang and not detected_equipment and any(w in raw_message.lower() for w in ["mixie", "mixy", "मिक्सी", "ಮಿಕ್ಸಿ", "மிக்ஸி", "మిక్సీ"]):
+                detected_equipment = {
+                    "equipment_type": "Commercial Mixer Grinder",
+                    "category": "household",
+                    "matched_keyword": "mixie",
+                }
+
         # Final intent determination with strict semantic precedence
         if is_social:
             intent = "CASUAL_CONVERSATION"
@@ -880,13 +1034,13 @@ class ChatService:
             intent = "AMBIGUOUS_QUERY"
         elif has_ambiguity_cue and len(conversation_history) > 1:
             intent = "CLARIFICATION_NEEDED"
-        elif is_outcome_report:
-            intent = "REPORT_OUTCOME"
-        elif is_explanation_or_cause:
+        elif is_explanation_or_cause or (multilingual_parsed and multilingual_parsed.get("intent") == "PROBLEM_EXPLANATION_OR_CAUSE"):
             intent = "PROBLEM_EXPLANATION_OR_CAUSE"
             if not detected_equipment and prev_equipment:
                 detected_equipment = prev_equipment
-        elif is_historical_memory_query:
+        elif is_outcome_report or (multilingual_parsed and multilingual_parsed.get("intent") == "REPORT_OUTCOME"):
+            intent = "REPORT_OUTCOME"
+        elif is_historical_memory_query or (multilingual_parsed and multilingual_parsed.get("intent") == "HISTORICAL_MEMORY_QUERY"):
             intent = "HISTORICAL_MEMORY_QUERY"
         elif is_simplify:
             intent = "FOLLOWUP_SIMPLIFY"
@@ -896,20 +1050,28 @@ class ChatService:
             intent = "FOLLOWUP_WHY_OR_HOW"
         elif is_concept_query:
             intent = "CONCEPT_EXPLANATION"
+        elif multilingual_parsed and (multilingual_parsed.get("intent") == "TROUBLESHOOTING_QUERY" or multilingual_parsed.get("is_equipment_troubleshooting")):
+            intent = "TROUBLESHOOTING_QUERY"
+            if not detected_equipment and prev_equipment:
+                detected_equipment = prev_equipment
         elif detected_equipment or any(kw in lower for kw in ["problem", "broken", "issue", "fault", "not working", "won't", "stops", "stopped", "stalled", "vibrat", "overheat", "noise", "loud", "leak", "smoke", "creak", "creaking", "stuck"]):
             intent = "TROUBLESHOOTING_QUERY"
         elif prev_equipment and any(w in lower for w in ["what", "how", "why", "when", "can", "could", "should", "is", "are", "do", "does", "test", "check", "fix"]):
             intent = "FOLLOWUP_QUESTION"
             detected_equipment = prev_equipment
+        elif multilingual_parsed and multilingual_parsed.get("intent"):
+            intent = multilingual_parsed["intent"]
         else:
             intent = "GENERAL_CAPABILITIES_INQUIRY"
 
         return {
             "intent": intent,
             "detected_equipment": detected_equipment,
-            "is_outcome_report": is_outcome_report,
-            "is_historical_memory_query": is_historical_memory_query,
+            "is_outcome_report": is_outcome_report or (intent == "REPORT_OUTCOME"),
+            "is_historical_memory_query": is_historical_memory_query or (intent == "HISTORICAL_MEMORY_QUERY"),
+            "detected_language": detected_language,
         }
+
 
     def search_local_memories(
         self,
@@ -1241,8 +1403,19 @@ class ChatService:
         matched_equipment_current = classification["detected_equipment"]
         is_historical_memory_query = classification["is_historical_memory_query"]
         is_outcome_report = classification["is_outcome_report"]
+        user_language = classification.get("detected_language", "English")
+        if any(w in lower_msg for w in ["in english", "speak in english", "talk in english", "english please", "can you speak in english", "answer in english"]):
+            user_language = "English"
+        elif user_language == "English":
+            for m in reversed(conversation_history[-4:]):
+                m_meta = m.get("metadata", {})
+                m_lang = m_meta.get("detected_language")
+                if m_lang and m_lang != "English" and (detect_indic_or_vernacular(raw_message) or len(raw_message.split()) <= 4):
+                    user_language = m_lang
+                    break
 
         # Retrieve previous equipment & precedents from conversation history
+
         prev_equipment: Optional[dict[str, Any]] = None
         prev_precedents: list[PrecedentRecord] = []
         recent_equipments_discussed: list[str] = []
@@ -1481,6 +1654,15 @@ class ChatService:
         groq_messages: list[dict[str, str]] = []
         direct_reply: Optional[str] = None
 
+        multilingual_instruction = ""
+        if user_language and user_language != "English":
+            multilingual_instruction = (
+                f"\n\nMULTILINGUAL RESPONSE INSTRUCTION:\n"
+                f"The user is communicating in {user_language}. Respond naturally and fluently in {user_language} (matching their script and conversational dialect, e.g. Devanagari Hindi for Hindi, Kannada script for Kannada, or natural Latin Hinglish/Kannada-English if they used Latin alphabet).\n"
+                f"Keep technical terms (such as 'overload switch', 'capacitor', 'mixer grinder', 'motor', 'power plug', 'wiring', 'bearing', 'voltage') clear and recognizable in their standard technical terminology.\n"
+                f"Do NOT force the response into English unless the user explicitly requested English."
+            )
+
         if intent == "CLARIFICATION_NEEDED":
             clarification_options = " or ".join(recent_equipments_discussed[:2]) if len(recent_equipments_discussed) >= 2 else "the equipment"
             direct_reply = f"Before I advise you, could you please clarify whether you're asking about the {clarification_options}?"
@@ -1492,7 +1674,7 @@ class ChatService:
                 "Respond warmly, naturally, and concisely (under 35 words). "
                 "Do NOT mention any previous machinery or equipment unless the user explicitly mentioned it in this turn. "
                 "Do NOT use troubleshooting section headers. Invite them to let you know whenever they have an equipment or device issue to diagnose."
-            )
+            ) + multilingual_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
@@ -1504,11 +1686,12 @@ class ChatService:
                 "The user is asking an unrelated general knowledge, coding, or trivia question.\n"
                 "Politely and concisely explain that RecallOps specializes in equipment diagnostics and troubleshooting rather than general knowledge. "
                 "Keep your response under 45 words. Do NOT include troubleshooting section headers or fabricate equipment symptoms."
-            )
+            ) + multilingual_instruction
             groq_messages = [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": raw_message},
             ]
+
 
         elif intent == "ACKNOWLEDGMENT":
             system_instruction = (
@@ -1610,7 +1793,7 @@ class ChatService:
                 "2. Briefly explain in plain English why this mechanical or electrical fix addressed (or failed to address) the underlying symptoms. Do NOT invent unstated test results or root causes.\n"
                 "3. Invite them to confirm storing this resolution in permanent plant memory for future fleet learning.\n"
                 "Do NOT repeat troubleshooting section headers. Keep response under 125 words."
-            )
+            ) + multilingual_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-4:]:
                 if m["role"] in ("user", "assistant"):
@@ -1631,7 +1814,7 @@ class ChatService:
                 "- Do NOT repeat troubleshooting section headers (Plausible Causes, Safety Alert, etc.).\n"
                 "- Relevant Memory Insight: If no matching historical repair records exist, you may concisely note that no prior repair incident was recorded for this issue. NEVER invent historical repair statistics or fabricate past repairs.\n"
                 "- Keep the response helpful, direct, and under 130 words."
-            )
+            ) + multilingual_instruction
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
@@ -1652,7 +1835,7 @@ class ChatService:
                 system_instruction = (
                     f"You are RecallOps. The user is in an active troubleshooting session regarding their {prev_equipment['equipment_type']}.\n"
                     "Helpfully and concisely address their inquiry, reminding them how you can assist with their current equipment issue (inspecting symptoms, safety precautions, historical repair precedents), without repeating a full introductory monologue."
-                )
+                ) + multilingual_instruction
                 groq_messages = [{"role": "system", "content": system_instruction}]
                 for m in conversation_history[-4:]:
                     if m["role"] in ("user", "assistant"):
@@ -1665,7 +1848,7 @@ class ChatService:
                     "Explain your capabilities warmly, clearly, and concisely (under 60 words).\n"
                     "Mention that users can describe equipment issues (such as pumps, motors, household appliances, electronics) to discover plausible causes, safety precautions, and historical repair precedents.\n"
                     "Do NOT include troubleshooting section headers."
-                )
+                ) + multilingual_instruction
                 groq_messages = [
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": raw_message},
@@ -1707,6 +1890,13 @@ class ChatService:
                 "- Never fabricate false machine IDs, dates, or outcomes.\n"
                 "- Do not use conversational filler or generic disclaimers."
             )
+            if user_language and user_language != "English":
+                system_instruction += (
+                    f"\n\nMULTILINGUAL INSTRUCTION:\n"
+                    f"The user message is in {user_language}. Respond naturally and fluently in {user_language} (matching their script/dialect, e.g. Devanagari Hindi for Hindi, Kannada script for Kannada, or natural Latin Hinglish/Kannada-English).\n"
+                    f"Keep technical terms (like overload switch, capacitor, mixer grinder, motor, power plug, bearings, wiring) clear and identifiable in standard technical terminology.\n"
+                    f"Write all 4 sections ('Plausible Causes', 'Safety Alert', 'Relevant Memory Insight', 'Question for Technician') with their headers and content in {user_language}."
+                )
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-4:]:
                 if m["role"] in ("user", "assistant"):
@@ -1719,6 +1909,7 @@ class ChatService:
                 f"Provide your concise diagnostic response adhering strictly to the 4 sections above."
             )
             groq_messages.append({"role": "user", "content": groq_user_prompt})
+
 
         else:
             # Fallback general query
@@ -2128,7 +2319,9 @@ class ChatService:
             "retrieved_precedents": [p.model_dump() for p in active_precedents],
             "outcome_to_record": outcome_to_record,
             "suggested_followups": suggested_followups,
+            "detected_language": user_language,
         }
+
 
         with get_db() as conn:
             conn.execute(
@@ -2154,6 +2347,7 @@ class ChatService:
             retrieved_precedents=retrieved_precedents_for_response,
             outcome_to_record=outcome_to_record,
             suggested_followups=suggested_followups,
+            detected_language=user_language,
             created_at=now_iso,
         )
 

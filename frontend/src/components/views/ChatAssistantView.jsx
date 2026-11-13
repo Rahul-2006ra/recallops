@@ -22,8 +22,12 @@ import {
   Activity,
   Flame,
   Laptop,
+  Loader2,
+  Square,
+  Globe,
 } from "lucide-react";
-import { sendChatMessage, recordOutcome, getConversation } from "../../services/api";
+import { sendChatMessage, recordOutcome, getConversation, transcribeAudio } from "../../services/api";
+
 import FormattedMessage from "../FormattedMessage";
 
 const EXAMPLE_PROMPTS = [
@@ -53,6 +57,101 @@ const EXAMPLE_PROMPTS = [
   },
 ];
 
+function VoiceRecordingHUD({
+  isRecording,
+  isTranscribing,
+  recordingSeconds,
+  audioLevel,
+  detectedVoiceLang,
+  formatTime,
+  onCancel,
+  onStop,
+  onClearLang,
+}) {
+  if (!isRecording && !isTranscribing && !detectedVoiceLang) return null;
+
+  return (
+    <div className="mb-2 space-y-1.5 text-left">
+      {isRecording && (
+        <div className="p-2.5 rounded-xl bg-slate-900/95 border border-red-500/60 shadow-lg shadow-red-950/40 flex items-center justify-between gap-3 text-xs backdrop-blur-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            <span className="font-mono text-red-400 font-semibold tracking-wide shrink-0">
+              {formatTime(recordingSeconds)} / 01:00
+            </span>
+            <span className="text-slate-400 text-[11px] truncate hidden sm:inline">
+              Listening in Hindi, Kannada, Hinglish, English...
+            </span>
+
+            {/* 5-bar animated audio level visualizer */}
+            <div className="flex items-end gap-1 h-4 ml-1 shrink-0" title={`Mic level: ${audioLevel}%`}>
+              {[0.4, 0.8, 1.2, 0.7, 0.5].map((multiplier, i) => (
+                <div
+                  key={i}
+                  className="w-1 bg-red-500 rounded-full transition-all duration-75"
+                  style={{
+                    height: `${Math.max(3, Math.min(16, (audioLevel * multiplier) / 4))}px`,
+                    opacity: audioLevel > 5 ? 1 : 0.4,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition"
+              title="Cancel recording"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onStop}
+              className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-[11px] flex items-center gap-1.5 transition shadow"
+              title="Stop and transcribe speech"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              Stop & Transcribe
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isTranscribing && (
+        <div className="p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/50 flex items-center gap-2.5 text-xs text-emerald-300 shadow-lg shadow-emerald-950/20 backdrop-blur-sm animate-pulse">
+          <Loader2 className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
+          <span className="font-medium">
+            Transcribing speech with multilingual Whisper AI (Hindi, Kannada, English)...
+          </span>
+        </div>
+      )}
+
+      {detectedVoiceLang && !isRecording && !isTranscribing && (
+        <div className="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-emerald-500/30 inline-flex items-center gap-1.5 text-[11px] text-slate-300">
+          <Globe className="w-3 h-3 text-emerald-400" />
+          <span>
+            Spoken language: <strong className="text-emerald-300 capitalize">{detectedVoiceLang}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={onClearLang}
+            className="ml-1 text-slate-400 hover:text-white"
+            title="Dismiss tag"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatAssistantView({
   activeConversationId,
   setActiveConversationId,
@@ -63,7 +162,10 @@ export default function ChatAssistantView({
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [detectedVoiceLang, setDetectedVoiceLang] = useState(null);
   const [savingOutcomeId, setSavingOutcomeId] = useState(null);
   const [savedOutcomes, setSavedOutcomes] = useState({});
   const [dismissedOutcomes, setDismissedOutcomes] = useState({});
@@ -71,61 +173,55 @@ export default function ChatAssistantView({
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerIntervalRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const isCancelledRef = useRef(false);
 
   const toggleExpandPrecedent = (cardKey) => {
     setExpandedPrecedents((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
   };
 
-  // Initialize Speech-to-Text if supported by browser
-  useEffect(() => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onstart = () => {
-        setIsRecording(true);
-      };
-
-      recognition.onresult = (event) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        setInputValue((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      };
-
-      recognition.onerror = (event) => {
-        console.warn("Speech recognition error:", event.error);
-        setIsRecording(false);
-        if (event.error === "not-allowed") {
-          showToast?.("Microphone access denied. Please check browser permissions.", "error");
-        } else if (event.error !== "no-speech") {
-          showToast?.(`Voice input note: ${event.error}`, "info");
-        }
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognitionRef.current = recognition;
-    } else {
-      setSpeechSupported(false);
+  // Safe cleanup of recording media tracks, intervals, and audio contexts
+  const cleanupAudio = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
     }
-
-    return () => {
-      if (recognitionRef.current) {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (_) {}
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => {
         try {
-          recognitionRef.current.abort();
+          track.stop();
         } catch (_) {}
-      }
+      });
+      audioStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    setAudioLevel(0);
+    setRecordingSeconds(0);
+    setIsRecording(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      cleanupAudio();
     };
-  }, [showToast]);
+  }, []);
+
 
   // Load conversation details when activeConversationId changes
   useEffect(() => {
@@ -169,24 +265,193 @@ export default function ChatAssistantView({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const toggleRecording = () => {
-    if (!speechSupported) {
-      showToast?.("Voice speech recognition is not supported in this browser.", "warning");
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast?.("Microphone is not supported in this browser environment.", "error");
       return;
     }
 
-    if (isRecording) {
+    try {
+      cleanupAudio();
+      isCancelledRef.current = false;
+      audioChunksRef.current = [];
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      // AudioContext & Analyser for real-time waveform / audio visualizer
       try {
-        recognitionRef.current?.stop();
-      } catch (_) {}
-      setIsRecording(false);
-    } else {
-      try {
-        recognitionRef.current?.start();
-      } catch (err) {
-        console.warn("Failed to start speech recognition:", err);
-        setIsRecording(false);
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtxClass) {
+          const audioCtx = new AudioCtxClass();
+          audioContextRef.current = audioCtx;
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          analyserRef.current = analyser;
+          const source = audioCtx.createMediaStreamSource(stream);
+          source.connect(analyser);
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const updateAudioLevel = () => {
+            if (!analyserRef.current) return;
+            analyserRef.current.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+            animFrameRef.current = requestAnimationFrame(updateAudioLevel);
+          };
+          updateAudioLevel();
+        }
+      } catch (audioErr) {
+        console.warn("AudioContext setup warning:", audioErr);
       }
+
+      // Pick supported mimeType
+      let mimeType = "";
+      if (typeof MediaRecorder !== "undefined" && typeof MediaRecorder.isTypeSupported === "function") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        }
+      }
+
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const wasCancelled = isCancelledRef.current;
+        const chunks = [...audioChunksRef.current];
+        audioChunksRef.current = [];
+
+        if (wasCancelled || chunks.length === 0) {
+          setIsTranscribing(false);
+          return;
+        }
+
+        const audioBlob = new Blob(chunks, { type: mimeType || "audio/webm" });
+        if (audioBlob.size < 500) {
+          setIsTranscribing(false);
+          showToast?.("Recorded audio was too short. Please try again.", "warning");
+          return;
+        }
+
+        setIsTranscribing(true);
+        try {
+          const res = await transcribeAudio(audioBlob);
+          if (res && res.text && res.text.trim()) {
+            const transcribedText = res.text.trim();
+            setInputValue((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+            if (res.language) {
+              setDetectedVoiceLang(res.language);
+            }
+            showToast?.(
+              `Transcribed (${res.language || "multilingual"}): "${transcribedText.slice(0, 45)}${
+                transcribedText.length > 45 ? "..." : ""
+              }"`,
+              "success"
+            );
+          } else {
+            showToast?.("No clear speech detected. Please speak closer to the microphone.", "warning");
+          }
+        } catch (err) {
+          console.error("Transcription error:", err);
+          showToast?.(
+            `Voice transcription failed: ${err.message || "Please check backend connection."}`,
+            "error"
+          );
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      // Duration timer (auto-stop at 60s)
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          if (prev >= 59) {
+            stopRecording();
+            return 60;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start microphone recording:", err);
+      cleanupAudio();
+      showToast?.(
+        `Microphone error: ${err.message || "Permission was denied or device is unavailable."}`,
+        "error"
+      );
+    }
+  };
+
+  const stopRecording = () => {
+    isCancelledRef.current = false;
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (_) {}
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (_) {}
+      });
+      audioStreamRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) {}
+    }
+    setIsRecording(false);
+    setAudioLevel(0);
+  };
+
+  const cancelRecording = () => {
+    isCancelledRef.current = true;
+    cleanupAudio();
+    audioChunksRef.current = [];
+    showToast?.("Voice recording cancelled.", "info");
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -195,10 +460,7 @@ export default function ChatAssistantView({
     if (!text || isLoading) return;
 
     if (isRecording) {
-      try {
-        recognitionRef.current?.stop();
-      } catch (_) {}
-      setIsRecording(false);
+      cancelRecording();
     }
 
     // Add user message to UI immediately
@@ -386,21 +648,17 @@ export default function ChatAssistantView({
 
             {/* Prominent Center Chat Composer */}
             <div className="w-full relative shadow-2xl shadow-emerald-950/20">
-              {isRecording && (
-                <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                    Listening via microphone... Speak your equipment problem clearly.
-                  </span>
-                  <button
-                    onClick={toggleRecording}
-                    aria-label="Stop recording"
-                    className="underline text-[11px] text-red-200 hover:text-white"
-                  >
-                    Stop
-                  </button>
-                </div>
-              )}
+              <VoiceRecordingHUD
+                isRecording={isRecording}
+                isTranscribing={isTranscribing}
+                recordingSeconds={recordingSeconds}
+                audioLevel={audioLevel}
+                detectedVoiceLang={detectedVoiceLang}
+                formatTime={formatTime}
+                onCancel={cancelRecording}
+                onStop={stopRecording}
+                onClearLang={() => setDetectedVoiceLang(null)}
+              />
 
               <div className="relative flex items-center bg-slate-900/80 rounded-2xl border border-slate-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all duration-150 p-1.5">
                 <textarea
@@ -409,7 +667,13 @@ export default function ChatAssistantView({
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask about an equipment anomaly, vibration, noise, or repair outcome..."
+                  placeholder={
+                    isRecording
+                      ? "Listening to speech (Hindi, Kannada, English, Hinglish)..."
+                      : isTranscribing
+                      ? "Transcribing your audio with multilingual Whisper AI..."
+                      : "Ask about an equipment anomaly, vibration, noise, or repair outcome..."
+                  }
                   className="w-full px-4 py-2.5 pr-24 bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none leading-relaxed"
                 />
 
@@ -417,15 +681,30 @@ export default function ChatAssistantView({
                   <button
                     type="button"
                     onClick={toggleRecording}
+                    disabled={isTranscribing}
                     aria-label={isRecording ? "Stop voice input" : "Speak equipment issue"}
                     className={`p-2 rounded-xl transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                       isRecording
                         ? "bg-red-600 text-white animate-pulse"
+                        : isTranscribing
+                        ? "bg-slate-800 text-emerald-400 cursor-wait"
                         : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                     }`}
-                    title={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                    title={
+                      isRecording
+                        ? "Stop recording and transcribe"
+                        : isTranscribing
+                        ? "Transcribing voice with Whisper..."
+                        : "Speak equipment issue (Multilingual)"
+                    }
                   >
-                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    {isTranscribing ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    ) : isRecording ? (
+                      <Square className="w-4 h-4 fill-current text-white" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
                   </button>
 
                   <button
@@ -839,21 +1118,17 @@ export default function ChatAssistantView({
       {messages.length > 0 && (
         <div className="sticky bottom-0 z-20 p-4 md:p-6 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
           <div className="max-w-3xl mx-auto">
-            {isRecording && (
-              <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                  Listening via microphone... Speak your equipment problem clearly.
-                </span>
-                <button
-                  onClick={toggleRecording}
-                  aria-label="Stop recording"
-                  className="underline text-[11px] text-red-200 hover:text-white"
-                >
-                  Stop
-                </button>
-              </div>
-            )}
+            <VoiceRecordingHUD
+              isRecording={isRecording}
+              isTranscribing={isTranscribing}
+              recordingSeconds={recordingSeconds}
+              audioLevel={audioLevel}
+              detectedVoiceLang={detectedVoiceLang}
+              formatTime={formatTime}
+              onCancel={cancelRecording}
+              onStop={stopRecording}
+              onClearLang={() => setDetectedVoiceLang(null)}
+            />
 
             <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all shadow-inner p-1">
               <textarea
@@ -864,7 +1139,9 @@ export default function ChatAssistantView({
                 onKeyDown={handleKeyDown}
                 placeholder={
                   isRecording
-                    ? "Listening to speech..."
+                    ? "Listening to speech (Hindi, Kannada, English, Hinglish)..."
+                    : isTranscribing
+                    ? "Transcribing your audio with multilingual Whisper AI..."
                     : "Ask about an equipment anomaly, vibration, noise, or repair outcome..."
                 }
                 className="w-full px-4 py-3 pr-24 bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none max-h-32 leading-relaxed"
@@ -874,15 +1151,30 @@ export default function ChatAssistantView({
                 <button
                   type="button"
                   onClick={toggleRecording}
+                  disabled={isTranscribing}
                   aria-label={isRecording ? "Stop voice input" : "Speak equipment issue"}
                   className={`p-2 rounded-xl transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                     isRecording
                       ? "bg-red-600 text-white animate-pulse"
+                      : isTranscribing
+                      ? "bg-slate-800 text-emerald-400 cursor-wait"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                   }`}
-                  title={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                  title={
+                    isRecording
+                      ? "Stop recording and transcribe"
+                      : isTranscribing
+                      ? "Transcribing voice with Whisper..."
+                      : "Speak equipment issue (Multilingual)"
+                  }
                 >
-                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  {isTranscribing ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                  ) : isRecording ? (
+                    <Square className="w-4 h-4 fill-current text-white" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
                 </button>
 
                 <button

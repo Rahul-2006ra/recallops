@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from backend.config import settings
 from backend.models.chat import (
     ChatRequest,
@@ -11,8 +11,11 @@ from backend.models.chat import (
     RecordOutcomeResponse,
     MemoryListResponse,
     MemoryItemResponse,
+    TranscriptionResponse,
 )
 from backend.services.chat_service import chat_service
+from backend.services.transcription_service import transcription_service
+
 
 logger = logging.getLogger(__name__)
 
@@ -137,4 +140,39 @@ def retry_sync_outcome(verification_id: str):
     except Exception as e:
         logger.error("Failed to retry sync for verification %s: %s", verification_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to synchronize record with Hindsight Cloud.")
+
+
+@router.post("/transcribe", response_model=TranscriptionResponse, summary="Transcribe speech with multilingual Groq Whisper")
+async def transcribe_audio(
+    file: UploadFile = File(..., description="Audio recording file (webm, wav, mp3, m4a, ogg)"),
+    language: Optional[str] = Query(None, description="Optional ISO language code or hint"),
+):
+    """
+    Multilingual speech transcription powered by Groq Whisper.
+    Supports auto-language detection across English, Hindi, Kannada, Tamil, Telugu,
+    Malayalam, Marathi, Bengali, Urdu, and Hinglish/code-switching.
+    """
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
+
+        res = transcription_service.transcribe_audio(
+            file_bytes=content,
+            filename=file.filename or "recording.webm",
+            content_type=file.content_type,
+            language=language,
+        )
+        return TranscriptionResponse(**res)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Transcription failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Speech transcription failed: {str(e)}",
+        )
+
 
