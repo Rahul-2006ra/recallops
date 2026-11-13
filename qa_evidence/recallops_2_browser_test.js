@@ -40,7 +40,7 @@ async function runTest() {
 
     // 2. Click an example prompt
     console.log('Step 2: Submitting troubleshooting prompt...');
-    const exampleButton = page.locator('text=Centrifugal Slurry Pump').first();
+    const exampleButton = page.locator('text=Industrial Slurry Pump').first();
     await exampleButton.click();
 
     // Wait for response bubble

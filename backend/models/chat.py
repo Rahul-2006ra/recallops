@@ -34,12 +34,13 @@ class PrecedentRecord(BaseModel):
     equipment_type: str
     symptoms: str
     action_taken: str
-    outcome_status: str  # 'SUCCESSFUL' | 'UNSUCCESSFUL'
+    outcome_status: str  # 'SUCCESSFUL' | 'UNSUCCESSFUL' | 'UNRESOLVED' | 'REPORTED'
+    verification_status: str = "TECHNICIAN_CONFIRMED"  # 'USER_REPORTED' | 'TECHNICIAN_CONFIRMED' | 'INDEPENDENTLY_VERIFIED'
     inspection_notes: Optional[str] = None
     verified_at: Optional[str] = None
     relevance_reason: Optional[str] = None
-    source: str = "sample_memory_demo"  # 'sample_memory_demo' | 'hindsight_cloud_live'
-    source_label: str = "Sample Plant Record (Demo Mode)"
+    source: str = "sample_fixture"  # 'sample_fixture' | 'sqlite_local_db' | 'hindsight_cloud'
+    source_label: str = "Sample Memory (Demo Mode)"
 
 
 class ChatRequest(BaseModel):

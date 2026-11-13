@@ -23,24 +23,24 @@ import FormattedMessage from "../FormattedMessage";
 
 const EXAMPLE_PROMPTS = [
   {
-    title: "Centrifugal Slurry Pump",
-    desc: "Vibrating excessively with casing temperature rising",
-    prompt: "My industrial centrifugal slurry pump is vibrating excessively and casing temperature is high.",
+    title: "Industrial Slurry Pump",
+    desc: "Vibrating and overheating under load",
+    prompt: "My industrial pump is vibrating and overheating.",
   },
   {
-    title: "Electric Motor",
-    desc: "Overheating and humming under continuous full load",
-    prompt: "My industrial electric induction motor is overheating and making unusual humming sounds.",
+    title: "Electric Induction Motor",
+    desc: "Making an unusual humming noise",
+    prompt: "My electric motor is making an unusual noise.",
   },
   {
-    title: "Reciprocating Compressor",
-    desc: "Discharge pressure dropped 30% with reed valve flutter",
-    prompt: "My reciprocating air compressor discharge pressure dropped suddenly and the reed valve is fluttering.",
+    title: "Commercial Convection Oven",
+    desc: "Keeps switching off mid-cycle",
+    prompt: "My oven keeps switching off.",
   },
   {
-    title: "Commercial Mixer Grinder",
-    desc: "Suddenly stopped working and won't turn on",
-    prompt: "My commercial mixer grinder suddenly stopped working and won't turn on.",
+    title: "Workstation Laptop",
+    desc: "Cooling fan is unusually loud and spinning fast",
+    prompt: "My laptop fan is unusually loud.",
   },
 ];
 
@@ -279,28 +279,17 @@ export default function ChatAssistantView({
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 relative">
       {/* Top Banner / Session Header */}
-      <div className="px-6 py-3.5 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md flex items-center justify-between">
+      <div className="px-6 py-3.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-slate-100">
-                RecallOps AI Troubleshooting
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Hindsight Memory Active
-              </span>
-              {mockMemoryMode && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/50">
-                  Credit Guard Active
-                </span>
-              )}
-            </div>
+            <h1 className="font-semibold text-sm text-slate-100">
+              RecallOps Troubleshooting Assistant
+            </h1>
             <p className="text-xs text-slate-400">
-              Cross-referencing telemetry with verified plant repair episodes
+              Conversational diagnostic intelligence grounded in verified past repairs
             </p>
           </div>
         </div>
@@ -308,7 +297,7 @@ export default function ChatAssistantView({
         {messages.length > 0 && (
           <button
             onClick={resetToNewChat}
-            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 transition"
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
             title="Start New Chat"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -326,18 +315,17 @@ export default function ChatAssistantView({
               <Sparkles className="w-7 h-7" />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-100">
                 What can I help you understand today?
               </h2>
               <p className="text-sm text-slate-400 max-w-lg mx-auto">
-                Describe an equipment anomaly, vibration, noise, or temperature rise.
-                RecallOps recalls verified repair precedents from past incidents to guide you safely.
+                Describe a problem. Understand possible causes. Learn from past repairs.
               </p>
             </div>
 
             {/* Example Prompt Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-4 text-left">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 text-left">
               {EXAMPLE_PROMPTS.map((ex, idx) => (
                 <button
                   key={idx}
@@ -355,21 +343,6 @@ export default function ChatAssistantView({
                   </p>
                 </button>
               ))}
-            </div>
-
-            <div className="pt-4 flex items-center justify-center gap-6 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                Verified Precedent Grounding
-              </span>
-              <span className="flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
-                Industrial Safety First (LOTO)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-blue-400" />
-                Hindsight Long-Term Memory
-              </span>
             </div>
           </div>
         ) : (

@@ -136,5 +136,7 @@ def test_multi_symptom_relevance_and_deduplication():
 
     # Verify accurate demo/sample labeling
     assert "Sample" in top_match["source_label"] or "Demo" in top_match["source_label"]
-    assert top_match["source"] == "sample_memory_demo"
+    assert top_match["source"] in ("sample_fixture", "sample_memory_demo")
+    assert top_match.get("verification_status") in ("TECHNICIAN_CONFIRMED", "INDEPENDENTLY_VERIFIED", "USER_REPORTED")
+
 

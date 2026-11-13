@@ -350,6 +350,11 @@ class ChatService:
                 else f"Relevant equipment precedent for {r.equipment_type} ({r.machine_id})."
             )
 
+            is_independently_verified = any(k in (r.verified_by or "").upper() for k in ["LEAD-ENG", "AUDIT", "CERT"])
+            verification_status = "INDEPENDENTLY_VERIFIED" if is_independently_verified else "TECHNICIAN_CONFIRMED"
+            source_key = "sample_fixture" if mock_mode else "sqlite_local_db"
+            source_tag = "Sample Memory (Demo Mode)" if mock_mode else "Local Plant Audit Log"
+
             precedents.append(
                 PrecedentRecord(
                     id=r.id,
@@ -358,11 +363,12 @@ class ChatService:
                     symptoms=r.symptoms,
                     action_taken=r.action_taken,
                     outcome_status=r.outcome_status,
+                    verification_status=verification_status,
                     inspection_notes=r.inspection_notes,
                     verified_at=r.verified_at[:10] if r.verified_at else None,
                     relevance_reason=relevance_desc,
-                    source="sample_memory_demo",
-                    source_label="Sample Plant Record (Demo Mode)",
+                    source=source_key,
+                    source_label=source_tag,
                 )
             )
 
@@ -402,30 +408,56 @@ class ChatService:
                 detected_equipment = {"equipment_type": eq_name, "category": category, "matched_keyword": kw}
                 break
 
-        # 4. Detect Intent
-        lower_msg = raw_message.lower()
-        is_outcome_report = any(phrase in lower_msg for phrase in [
-            "replaced", "technician fixed", "technician replaced", "now working", "did not work",
-            "failed to fix", "fixed it", "repaired by", "outcome was", "problem resolved",
-            "solved the issue", "didn't work", "still not working", "service technician"
-        ])
-        is_troubleshooting = any(phrase in lower_msg for phrase in [
-            "overheating", "vibrating", "vibration", "noise", "smoke", "leaking", "shutting down",
-            "tripping", "broken", "stopped", "stalled", "not starting", "error", "problem", "fault"
-        ]) or (detected_equipment is not None)
+        # 4. Detect Intent Adaptively
+        lower_msg = raw_message.lower().strip()
 
-        if is_outcome_report:
+        # Greetings
+        is_greeting = any(lower_msg == g or lower_msg.startswith(g + " ") or lower_msg.startswith(g + "!") or lower_msg.startswith(g + ",") for g in [
+            "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "howdy", "greetings"
+        ])
+
+        # Gratitude / Acknowledgment
+        is_gratitude = any(lower_msg == g or lower_msg.startswith(g + " ") or lower_msg.startswith(g + "!") or lower_msg.startswith(g + ".") for g in [
+            "thank you", "thanks", "thx", "thank u", "appreciate it", "great thanks", "ok thanks", "got it", "perfect", "awesome"
+        ])
+
+        # Outcome reporting
+        is_outcome_report = any(phrase in lower_msg for phrase in [
+            "replaced", "technician fixed", "technician replaced", "now working", "now it works",
+            "did not work", "failed to fix", "fixed it", "repaired by", "outcome was",
+            "problem resolved", "solved the issue", "didn't work", "still not working", "service technician"
+        ])
+
+        # Educational / Conceptual inquiry
+        is_concept_query = any(lower_msg.startswith(p) for p in [
+            "what is a ", "what is an ", "what is ", "what are ",
+            "how does a ", "how does an ", "how does ", "explain ",
+            "tell me about ", "why do ", "define "
+        ]) and not is_outcome_report
+
+        # Equipment Troubleshooting Query
+        is_troubleshooting = any(phrase in lower_msg for phrase in [
+            "overheating", "overheat", "vibrating", "vibration", "noise", "loud", "smoke", "leaking", "leak",
+            "shutting down", "switching off", "turns off", "shuts off", "tripping", "broken",
+            "stopped", "stalled", "not starting", "error", "problem", "fault", "failure", "flutter"
+        ]) or (detected_equipment is not None and not is_greeting and not is_concept_query)
+
+        if is_greeting:
+            intent = "CASUAL_GREETING"
+        elif is_gratitude:
+            intent = "ACKNOWLEDGMENT"
+        elif is_concept_query:
+            intent = "CONCEPT_EXPLANATION"
+        elif is_outcome_report:
             intent = "REPORT_OUTCOME"
         elif is_troubleshooting:
             intent = "TROUBLESHOOTING_QUERY"
-        elif any(phrase in lower_msg for phrase in ["hello", "hi", "hey", "who are you", "what can you do"]):
-            intent = "CASUAL_GREETING"
         elif any(phrase in lower_msg for phrase in ["what happened", "history", "previous incident", "past repair"]):
             intent = "HISTORY_QUERY"
         else:
             intent = "GENERAL_INQUIRY"
 
-        # 5. Retrieve Precedents if relevant
+        # 5. Retrieve Precedents ONLY when relevant to troubleshooting or outcome reporting
         mock_mode = req.mock_memory if req.mock_memory is not None else settings.HINDSIGHT_MOCK_MODE
         retrieved_precedents: list[PrecedentRecord] = []
         if intent in ("TROUBLESHOOTING_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
@@ -448,8 +480,7 @@ class ChatService:
                 "ready_to_save": True,
             }
 
-        # 7. Formulate Groq prompt & inference
-        # Load conversation history
+        # 7. Formulate Adaptive Groq Prompt Based on Intent
         with get_db() as conn:
             recent_msgs = conn.execute(
                 "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 4",
@@ -466,38 +497,83 @@ class ChatService:
                     f"  Date: {p.verified_at or 'Recorded in plant history'}\n"
                     f"  Reported Symptoms: {p.symptoms}\n"
                     f"  Repair Action Taken: {p.action_taken}\n"
-                    f"  Verified Outcome: {p.outcome_status}\n"
+                    f"  Verified Outcome: {p.outcome_status} (Verification: {p.verification_status})\n"
                     f"  Inspection Notes: {p.inspection_notes}\n\n"
                 )
         else:
             precedent_text = "No prior historical repair precedents were found in the episodic memory bank for this exact symptom profile.\n"
 
-        system_instruction = (
-            "You are RecallOps — an AI industrial troubleshooting assistant that learns from verified real-world experiences.\n"
-            "Communicate simply, crisply, and practically for field technicians and equipment operators.\n\n"
-            "MANDATORY RESPONSE STRUCTURE:\n"
-            "Plausible Causes:\n"
-            "- 3 to 4 concise, easily understandable bullet points explaining likely root causes in plain English. No dense jargon.\n\n"
-            "Safety Alert:\n"
-            "- Exactly 1 clear, necessary safety precaution (Lockout/Tagout, power disconnect, pressure bleed, or PPE) if hazardous electrical, thermal, rotating, or pressurized parts are involved.\n\n"
-            "Relevant Memory Insight:\n"
-            "- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below. Mention the machine ID (e.g. M-112 or M-108) and state whether the repair SUCCEEDED or was UNSUCCESSFUL. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
-            "Question for Technician:\n"
-            "- Exactly 1 targeted, practical question the user can ask their certified maintenance technician.\n\n"
-            "CONSTRAINTS:\n"
-            "- Total response must be under 175 words.\n"
-            "- Never fabricate false machine IDs, dates, or outcomes.\n"
-            "- Do not use conversational filler or generic disclaimers."
-        )
+        if intent == "CASUAL_GREETING":
+            system_instruction = (
+                "You are RecallOps — an AI troubleshooting assistant that learns from verified real-world experiences.\n"
+                "Respond warmly, concisely, and naturally. Greet the user and invite them to describe any equipment problem "
+                "(motors, pumps, compressors, appliances, or devices) they need help understanding or diagnosing. "
+                "Do NOT use troubleshooting section headers. Keep response under 40 words."
+            )
+            groq_user_prompt = f"USER GREETING: \"{raw_message}\"\nRespond naturally and concisely."
 
-        groq_user_prompt = (
-            f"CONVERSATION HISTORY:\n{history_context if history_context else 'None (First message)'}\n\n"
-            f"USER INQUIRY:\n\"{raw_message}\"\n\n"
-            f"DETECTED EQUIPMENT: {detected_equipment['equipment_type'] if detected_equipment else 'Not specified'}\n"
-            f"IDENTIFIED HAZARD: {detected_hazard or 'Standard industrial mechanical caution'}\n\n"
-            f"{precedent_text}\n"
-            f"Provide your concise diagnostic response adhering strictly to the 4 sections above."
-        )
+        elif intent == "ACKNOWLEDGMENT":
+            system_instruction = (
+                "You are RecallOps. The user is thanking or acknowledging you.\n"
+                "Respond warmly and briefly (under 30 words), letting them know you are here whenever they need equipment diagnostics "
+                "or verified repair advice. Do NOT include troubleshooting section headers."
+            )
+            groq_user_prompt = f"USER MESSAGE: \"{raw_message}\"\nRespond warmly and briefly."
+
+        elif intent == "CONCEPT_EXPLANATION":
+            system_instruction = (
+                "You are RecallOps — an AI industrial troubleshooting assistant.\n"
+                "Provide a clear, educational explanation of the requested equipment concept in plain English. "
+                "Use 2 to 3 concise, readable bullet points or short paragraphs. "
+                "Do NOT include troubleshooting section headers or safety alerts unless dangerous maintenance work is mentioned. "
+                "Keep response under 120 words."
+            )
+            groq_user_prompt = f"USER QUESTION: \"{raw_message}\"\nExplain this concept clearly and educationally."
+
+        elif intent == "REPORT_OUTCOME":
+            system_instruction = (
+                "You are RecallOps. The user is reporting a completed field repair outcome.\n"
+                "Respond in 2 to 3 concise points:\n"
+                "1. Acknowledge the outcome (confirming whether the action succeeded or failed).\n"
+                "2. Briefly explain in plain English why this mechanical/electrical fix addressed (or failed to address) the underlying symptoms.\n"
+                "3. Invite them to confirm and store this verified resolution in permanent plant memory for future fleet learning.\n"
+                "Keep response under 130 words."
+            )
+            groq_user_prompt = (
+                f"USER REPORT: \"{raw_message}\"\n"
+                f"DETECTED EQUIPMENT: {detected_equipment['equipment_type'] if detected_equipment else 'Not specified'}\n"
+                f"{precedent_text}\n"
+                f"Provide your concise response acknowledging the repair outcome."
+            )
+
+        else:
+            # Standard Troubleshooting Query
+            system_instruction = (
+                "You are RecallOps — an AI industrial troubleshooting assistant that learns from verified real-world experiences.\n"
+                "Communicate simply, crisply, and practically for field technicians and equipment operators.\n\n"
+                "MANDATORY RESPONSE STRUCTURE:\n"
+                "Plausible Causes:\n"
+                "- 3 to 4 concise, easily understandable bullet points explaining likely root causes in plain English. No dense jargon.\n\n"
+                "Safety Alert:\n"
+                "- Exactly 1 clear, necessary safety precaution (Lockout/Tagout, power disconnect, pressure bleed, or PPE) if hazardous electrical, thermal, rotating, or pressurized parts are involved.\n\n"
+                "Relevant Memory Insight:\n"
+                "- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below. Mention the machine ID (e.g. M-112 or M-108) and state whether the repair SUCCEEDED or was UNSUCCESSFUL. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
+                "Question for Technician:\n"
+                "- Exactly 1 targeted, practical question the user can ask their certified maintenance technician.\n\n"
+                "CONSTRAINTS:\n"
+                "- Total response must be under 175 words.\n"
+                "- Never fabricate false machine IDs, dates, or outcomes.\n"
+                "- Do not use conversational filler or generic disclaimers."
+            )
+
+            groq_user_prompt = (
+                f"CONVERSATION HISTORY:\n{history_context if history_context else 'None (First message)'}\n\n"
+                f"USER INQUIRY:\n\"{raw_message}\"\n\n"
+                f"DETECTED EQUIPMENT: {detected_equipment['equipment_type'] if detected_equipment else 'Not specified'}\n"
+                f"IDENTIFIED HAZARD: {detected_hazard or 'Standard industrial mechanical caution'}\n\n"
+                f"{precedent_text}\n"
+                f"Provide your concise diagnostic response adhering strictly to the 4 sections above."
+            )
 
         try:
             client = groq_service.get_client()
@@ -520,13 +596,25 @@ class ChatService:
                 "• Next Step: Consult a certified maintenance technician to verify operating parameters."
             )
 
-        # 8. Determine suggested follow-up quick-action prompts
+        # 8. Adaptive Suggested Follow-Up Prompts
         suggested_followups = []
-        if intent == "TROUBLESHOOTING_QUERY":
+        if intent == "CASUAL_GREETING":
             suggested_followups = [
-                "What specific questions should I ask my technician?",
-                "Has this failure occurred on any other machines?",
-                "What safety steps must I take before opening the housing?",
+                "My industrial pump is vibrating and overheating.",
+                "My electric motor is making an unusual noise.",
+                "My oven keeps switching off.",
+            ]
+        elif intent == "ACKNOWLEDGMENT":
+            suggested_followups = [
+                "Check my saved memories",
+                "Start a new troubleshooting question",
+                "Show recent repairs",
+            ]
+        elif intent == "CONCEPT_EXPLANATION":
+            suggested_followups = [
+                "How does bearing wear cause excessive vibration?",
+                "What are common symptoms of coupling misalignment?",
+                "Check pump repair history",
             ]
         elif intent == "REPORT_OUTCOME":
             suggested_followups = [
@@ -536,9 +624,9 @@ class ChatService:
             ]
         else:
             suggested_followups = [
-                "My industrial pump is vibrating excessively",
-                "My motor is overheating under full load",
-                "Show my recent verified repairs",
+                "What specific questions should I ask my technician?",
+                "Has this failure occurred on any other machines?",
+                "What safety steps must I take before opening the housing?",
             ]
 
         # 9. Persist messages to SQLite
