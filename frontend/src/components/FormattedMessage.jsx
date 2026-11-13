@@ -26,7 +26,7 @@ function parseInline(text) {
         return (
           <code
             key={`${i}-${j}`}
-            className="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[11px] border border-slate-700/60"
+            className="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-mono text-[11.5px] border border-slate-700/60"
           >
             {cPart.slice(1, -1)}
           </code>
@@ -97,16 +97,20 @@ export default function FormattedMessage({ content }) {
 
       if (
         rawLine.startsWith("#") ||
-        (rawLine.startsWith("**") && rawLine.endsWith("**") && rawLine.length < 50) ||
+        (rawLine.startsWith("**") && rawLine.endsWith("**") && rawLine.length < 60) ||
         lower.startsWith("plausible cause") ||
         lower.startsWith("safety alert") ||
+        lower.startsWith("critical safety") ||
+        lower.startsWith("relevant memory") ||
+        lower.startsWith("memory insight") ||
         lower.startsWith("historical experience") ||
         lower.startsWith("question for technician")
       ) {
         let sectionType = "general";
-        if (lower.includes("safety")) sectionType = "safety";
+        if (lower.includes("safety") || lower.includes("alert")) sectionType = "safety";
         else if (lower.includes("question") || lower.includes("ask")) sectionType = "question";
-        else if (lower.includes("historical") || lower.includes("precedent")) sectionType = "history";
+        else if (lower.includes("memory") || lower.includes("historical") || lower.includes("precedent")) sectionType = "history";
+        else if (lower.includes("cause")) sectionType = "causes";
 
         blocks.push({
           type: "heading",
@@ -124,14 +128,25 @@ export default function FormattedMessage({ content }) {
   flushList();
 
   return (
-    <div className="space-y-3 text-slate-200 text-[13.5px] leading-relaxed">
+    <div className="space-y-3 text-slate-200 text-[14px] leading-relaxed">
       {blocks.map((block, idx) => {
         if (block.type === "heading") {
+          if (block.sectionType === "causes") {
+            return (
+              <div
+                key={idx}
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 mt-3 mb-1"
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span>{block.text}</span>
+              </div>
+            );
+          }
           if (block.sectionType === "safety") {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400 mt-2 mb-1"
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400 mt-3 mb-1"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
                 <span>{block.text}</span>
@@ -142,7 +157,7 @@ export default function FormattedMessage({ content }) {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 mt-3 mb-1"
               >
                 <HelpCircle className="w-3.5 h-3.5" />
                 <span>{block.text}</span>
@@ -153,7 +168,7 @@ export default function FormattedMessage({ content }) {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-400 mt-3 mb-1"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>{block.text}</span>
@@ -163,7 +178,7 @@ export default function FormattedMessage({ content }) {
           return (
             <h4
               key={idx}
-              className="text-xs font-bold uppercase tracking-wider text-emerald-400 mt-3 mb-1"
+              className="text-xs font-bold uppercase tracking-wider text-slate-300 mt-3 mb-1"
             >
               {block.text}
             </h4>
@@ -175,7 +190,7 @@ export default function FormattedMessage({ content }) {
             <ul key={idx} className="space-y-2 my-2">
               {block.items.map((item, itemIdx) => (
                 <li key={itemIdx} className="flex items-start gap-2.5 text-slate-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-2"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0 mt-2"></span>
                   <div className="flex-1 leading-normal">{parseInline(item)}</div>
                 </li>
               ))}

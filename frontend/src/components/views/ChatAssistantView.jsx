@@ -17,6 +17,8 @@ import {
   Bookmark,
   Tag,
   Info,
+  ShieldCheck,
+  Layers,
 } from "lucide-react";
 import { sendChatMessage, recordOutcome, getConversation } from "../../services/api";
 import FormattedMessage from "../FormattedMessage";
@@ -48,7 +50,6 @@ export default function ChatAssistantView({
   activeConversationId,
   setActiveConversationId,
   mockMemoryMode,
-  onViewMemoryDetails,
   showToast,
 }) {
   const [messages, setMessages] = useState([]);
@@ -123,9 +124,23 @@ export default function ChatAssistantView({
     let isMounted = true;
     getConversation(activeConversationId)
       .then((conv) => {
-        if (isMounted && conv && conv.messages) {
-          setMessages(conv.messages);
-        }
+        if (!isMounted || !conv || !conv.messages) return;
+        const formatted = conv.messages.map((m) => {
+          let parsedMeta = {};
+          if (m.metadata) {
+            try {
+              parsedMeta = typeof m.metadata === "string" ? JSON.parse(m.metadata) : m.metadata;
+            } catch (_) {}
+          }
+          return {
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            metadata: parsedMeta,
+            created_at: m.created_at,
+          };
+        });
+        setMessages(formatted);
       })
       .catch((err) => {
         console.warn("Failed to load conversation history:", err);
@@ -142,7 +157,9 @@ export default function ChatAssistantView({
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
   }, [messages, isLoading]);
 
   const toggleRecording = () => {
@@ -288,81 +305,148 @@ export default function ChatAssistantView({
     setActiveConversationId(null);
     setMessages([]);
     setInputValue("");
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 relative">
-      {/* Top Banner / Session Header */}
-      <div className="px-6 py-3.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <Sparkles className="w-4 h-4" />
+      {/* Top Header Bar (Shown when in active conversation) */}
+      {messages.length > 0 && (
+        <div className="px-4 md:px-8 py-3.5 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md flex items-center justify-between z-10 transition-all">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h1 className="font-semibold text-xs md:text-sm text-slate-100 flex items-center gap-1.5">
+                <span>RecallOps Troubleshooting Assistant</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </h1>
+              <p className="text-[11px] text-slate-400 hidden sm:block">
+                Conversational diagnostic intelligence grounded in verified past repairs
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-semibold text-sm text-slate-100">
-              RecallOps Troubleshooting Assistant
-            </h1>
-            <p className="text-xs text-slate-400">
-              Conversational diagnostic intelligence grounded in verified past repairs
-            </p>
-          </div>
-        </div>
 
-        {messages.length > 0 && (
           <button
             onClick={resetToNewChat}
-            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition shadow-sm"
             title="Start New Chat"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>New Chat</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Main Conversation Feed */}
+      {/* Main Conversation Feed or Centered Landing */}
       <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
         {messages.length === 0 ? (
-          /* Empty / Welcome State */
-          <div className="max-w-2xl mx-auto my-auto pt-8 md:pt-16 text-center space-y-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600/20 via-emerald-500/10 to-transparent border border-emerald-500/30 text-emerald-400 shadow-lg shadow-emerald-950/50">
+          /* ========================================================================= */
+          /* PREMIUM CENTERED HOMEPAGE LANDING EXPERIENCE                              */
+          /* ========================================================================= */
+          <div className="max-w-2xl mx-auto min-h-[75vh] flex flex-col justify-center items-center text-center space-y-7 py-6">
+            {/* Elegant Icon Badge */}
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500/20 via-emerald-400/10 to-transparent border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/40">
               <Sparkles className="w-7 h-7" />
             </div>
 
-            <div className="space-y-2.5">
-              <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-100">
+            {/* Headline and Subtitle */}
+            <div className="space-y-2.5 max-w-xl">
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-100">
                 What can I help you understand today?
-              </h2>
-              <p className="text-sm text-slate-400 max-w-lg mx-auto">
+              </h1>
+              <p className="text-sm md:text-base text-slate-400 max-w-md mx-auto leading-relaxed">
                 Describe a problem. Understand possible causes. Learn from past repairs.
               </p>
             </div>
 
-            {/* Example Prompt Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 text-left">
-              {EXAMPLE_PROMPTS.map((ex, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(ex.prompt)}
-                  className="p-3.5 rounded-xl bg-slate-900/70 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/40 transition group flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between w-full mb-1">
-                    <span className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 transition">
-                      {ex.title}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
-                  </div>
-                  <p className="text-xs text-slate-400 line-clamp-2">
-                    {ex.desc}
-                  </p>
-                </button>
-              ))}
+            {/* Prominent Center Chat Composer */}
+            <div className="w-full relative shadow-2xl shadow-emerald-950/30">
+              {isRecording && (
+                <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                    Listening via microphone... Speak your equipment problem clearly.
+                  </span>
+                  <button
+                    onClick={toggleRecording}
+                    className="underline text-[11px] text-red-200 hover:text-white"
+                  >
+                    Stop
+                  </button>
+                </div>
+              )}
+
+              <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-1.5">
+                <textarea
+                  ref={inputRef}
+                  rows={2}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about an equipment anomaly, vibration, noise, or repair outcome..."
+                  className="w-full px-4 py-2.5 pr-24 bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none leading-relaxed"
+                />
+
+                <div className="absolute right-3.5 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    className={`p-2 rounded-xl transition ${
+                      isRecording
+                        ? "bg-red-600 text-white animate-pulse"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    }`}
+                    title={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                  >
+                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputValue.trim() || isLoading}
+                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Four Subtle Interactive Example Prompts */}
+            <div className="w-full pt-1">
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-3 text-left">
+                Suggested Scenarios
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                {EXAMPLE_PROMPTS.map((ex, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSendMessage(ex.prompt)}
+                    className="p-3.5 rounded-xl bg-slate-900/50 hover:bg-slate-850/80 border border-slate-800/80 hover:border-emerald-500/40 transition group flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 transition">
+                        {ex.title}
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
+                    </div>
+                    <p className="text-[11.5px] text-slate-400 line-clamp-2">
+                      {ex.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
-          /* Message List */
-          <div className="max-w-3xl mx-auto space-y-6">
+          /* ========================================================================= */
+          /* ACTIVE CONVERSATION FEED                                                  */
+          /* ========================================================================= */
+          <div className="max-w-3xl mx-auto space-y-6 pb-28">
             {messages.map((msg) => {
               const isUser = msg.role === "user";
               const meta = msg.metadata || {};
@@ -380,10 +464,10 @@ export default function ChatAssistantView({
                   }`}
                 >
                   <div
-                    className={`rounded-2xl px-5 py-4 max-w-[92%] md:max-w-[85%] text-sm leading-relaxed shadow-sm ${
+                    className={`rounded-2xl px-5 py-4 max-w-[95%] md:max-w-[88%] text-[14px] leading-relaxed shadow-sm transition-all ${
                       isUser
-                        ? "bg-emerald-600 text-white rounded-br-none"
-                        : "bg-slate-900/90 text-slate-200 border border-slate-800/90 rounded-bl-none"
+                        ? "bg-emerald-600 text-white rounded-br-sm shadow-emerald-950/30"
+                        : "bg-slate-900/85 text-slate-200 border border-slate-800/90 rounded-bl-sm"
                     }`}
                   >
                     {/* User / Assistant Header */}
@@ -392,7 +476,7 @@ export default function ChatAssistantView({
                         <span className="font-medium text-emerald-100">You (Field Operator)</span>
                       ) : (
                         <span className="font-medium text-emerald-400 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5" />
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                           RecallOps Agent
                         </span>
                       )}
@@ -403,20 +487,20 @@ export default function ChatAssistantView({
 
                     {/* Hazard Warning Alert Banner */}
                     {hazard && !isUser && (
-                      <div className="mb-3 p-3 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-start gap-2.5">
+                      <div className="mb-3.5 p-3 rounded-xl bg-rose-950/70 border border-rose-800/80 text-rose-200 text-xs flex items-start gap-2.5">
                         <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
                         <div>
                           <strong className="block font-semibold uppercase tracking-wider text-[11px] text-rose-300">
                             Critical Safety Protocol
                           </strong>
-                          <span>{hazard}</span>
+                          <span className="leading-normal">{hazard}</span>
                         </div>
                       </div>
                     )}
 
                     {/* Message Body with Safe Markdown & Structured Typography */}
                     {isUser ? (
-                      <div className="whitespace-pre-wrap leading-relaxed text-[13.5px]">
+                      <div className="whitespace-pre-wrap leading-relaxed">
                         {msg.content}
                       </div>
                     ) : (
@@ -428,7 +512,7 @@ export default function ChatAssistantView({
                       <div className="mt-4 pt-3.5 border-t border-slate-800/80">
                         <div className="flex items-center justify-between mb-2.5">
                           <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <Database className="w-3.5 h-3.5 text-blue-400" />
+                            <Database className="w-3.5 h-3.5 text-teal-400" />
                             Historical Precedents ({precedents.length})
                           </span>
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
@@ -442,13 +526,13 @@ export default function ChatAssistantView({
                             const displaySourceLabel =
                               p.source_label ||
                               (mockMemoryMode
-                                ? "Sample Plant Record (Demo Mode)"
+                                ? "Sample Memory (Demo Mode)"
                                 : "Hindsight Cloud (Live Verified)");
 
                             return (
                               <div
                                 key={idx}
-                                className={`p-3 rounded-xl border text-xs transition ${
+                                className={`p-3.5 rounded-xl border text-xs transition ${
                                   isSuccess
                                     ? "bg-slate-950/80 border-slate-800/90 hover:border-emerald-500/40"
                                     : "bg-slate-950/80 border-slate-800/90 hover:border-amber-500/40"
@@ -490,14 +574,14 @@ export default function ChatAssistantView({
 
                                 {/* Relevance explanation */}
                                 {p.relevance_reason && (
-                                  <p className="text-[11px] text-blue-300/90 font-medium mb-1.5 flex items-center gap-1">
-                                    <Sparkles className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                                  <p className="text-[11px] text-teal-300 font-medium mb-1.5 flex items-center gap-1">
+                                    <Sparkles className="w-3 h-3 text-teal-400 flex-shrink-0" />
                                     <span>{p.relevance_reason}</span>
                                   </p>
                                 )}
 
                                 {/* Action details */}
-                                <div className="text-slate-300 text-[11.5px] leading-relaxed">
+                                <div className="text-slate-300 text-[12px] leading-relaxed">
                                   <strong className="text-slate-200">
                                     {isSuccess ? "Resolution Action:" : "Attempted Action (Avoid Repeating):"}
                                   </strong>{" "}
@@ -521,42 +605,71 @@ export default function ChatAssistantView({
                       </div>
                     )}
 
-                    {/* Outcome Recording Prompt Card */}
+                    {/* Five-Field Repair Outcome Confirmation Card */}
                     {outcomeToRecord && !isUser && (
-                      <div className="mt-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-xs">
-                        <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-emerald-800/40">
-                          <span className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                      <div className="mt-4 p-4 rounded-xl bg-slate-950 border border-emerald-800/60 text-xs shadow-md">
+                        <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-emerald-900/40">
+                          <span className="font-semibold text-emerald-300 flex items-center gap-2 text-xs">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             Confirmed Field Repair Outcome Detected
                           </span>
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${outcomeToRecord.outcome_status === "SUCCESSFUL" ? "bg-emerald-900/80 text-emerald-300" : "bg-amber-900/80 text-amber-300"}`}>
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                            outcomeToRecord.outcome_status === "SUCCESSFUL"
+                              ? "bg-emerald-950 text-emerald-300 border border-emerald-800/80"
+                              : "bg-amber-950 text-amber-300 border border-amber-800/80"
+                          }`}>
                             {outcomeToRecord.outcome_status}
                           </span>
                         </div>
-                        <div className="mb-2.5 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1 text-[11px] text-slate-300">
-                          <p><strong className="text-slate-200">Equipment:</strong> {outcomeToRecord.equipment_type}</p>
-                          <p><strong className="text-slate-200">Original Problem:</strong> {outcomeToRecord.symptoms || "Reported equipment issue from session"}</p>
-                          <p><strong className="text-slate-200">Repair Performed:</strong> {outcomeToRecord.action_taken}</p>
-                          <p><strong className="text-slate-200">Outcome:</strong> <span className={outcomeToRecord.outcome_status === "SUCCESSFUL" ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>{outcomeToRecord.outcome_status}</span></p>
-                          <p><strong className="text-slate-200">Verification Source:</strong> {outcomeToRecord.verification_source || (outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "Technician Field Report")}</p>
+
+                        {/* Five Formatted Fields */}
+                        <div className="mb-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-[11.5px] text-slate-300">
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
+                            <span className="text-slate-400 font-medium">Equipment:</span>
+                            <span className="font-semibold text-slate-200">{outcomeToRecord.equipment_type}</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
+                            <span className="text-slate-400 font-medium">Original Problem:</span>
+                            <span className="text-slate-200">{outcomeToRecord.symptoms || "Reported equipment issue from session"}</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
+                            <span className="text-slate-400 font-medium">Repair Performed:</span>
+                            <span className="text-slate-200 font-medium">{outcomeToRecord.action_taken}</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
+                            <span className="text-slate-400 font-medium">Outcome:</span>
+                            <span className={`font-semibold ${
+                              outcomeToRecord.outcome_status === "SUCCESSFUL" ? "text-emerald-400" : "text-amber-400"
+                            }`}>
+                              {outcomeToRecord.outcome_status}
+                            </span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5">
+                            <span className="text-slate-400 font-medium">Verification Source:</span>
+                            <span className="text-slate-200 font-mono text-[10.5px]">
+                              {outcomeToRecord.verification_source || (outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "Technician Field Report")}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-slate-400 mb-2.5 text-[11px]">
+
+                        <p className="text-slate-400 mb-3 text-[11px] leading-relaxed">
                           Would you like to store this verified resolution in RecallOps permanent memory for future fleet diagnostics?
                         </p>
+
                         {isOutcomeSaved ? (
-                          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium py-1">
-                            <Check className="w-4 h-4" />
+                          <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium py-1.5 px-3 rounded-lg bg-emerald-950/60 border border-emerald-800/60">
+                            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                             <span>{savedOutcomes[msg.id]}</span>
                           </div>
                         ) : (
                           <button
                             onClick={() => handleConfirmSaveOutcome(msg.id, outcomeToRecord)}
                             disabled={savingOutcomeId === msg.id}
-                            className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                            className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-emerald-950/40"
                           >
                             {savingOutcomeId === msg.id ? (
                               <>
-                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                 Storing verified outcome...
                               </>
                             ) : (
@@ -571,14 +684,14 @@ export default function ChatAssistantView({
                     )}
                   </div>
 
-                  {/* Quick-action suggested follow-up chips */}
+                  {/* Suggested follow-up prompt chips */}
                   {followups.length > 0 && !isUser && (
-                    <div className="flex flex-wrap gap-1.5 mt-2 max-w-[85%]">
+                    <div className="flex flex-wrap gap-1.5 mt-2.5 max-w-[88%]">
                       {followups.map((f, i) => (
                         <button
                           key={i}
                           onClick={() => handleSendMessage(f)}
-                          className="text-[11px] px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 transition"
+                          className="text-[11.5px] px-3 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 transition shadow-sm"
                         >
                           {f}
                         </button>
@@ -592,7 +705,7 @@ export default function ChatAssistantView({
             {/* Loading Indicator */}
             {isLoading && (
               <div className="flex flex-col items-start">
-                <div className="rounded-2xl px-4 py-3 bg-slate-900 border border-slate-800 text-slate-300 text-xs flex items-center gap-3">
+                <div className="rounded-2xl px-4 py-3 bg-slate-900/90 border border-slate-800 text-slate-300 text-xs flex items-center gap-3 shadow-sm">
                   <span className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
                   <div className="space-y-0.5">
                     <span className="font-medium text-slate-200">
@@ -611,91 +724,68 @@ export default function ChatAssistantView({
         )}
       </div>
 
-      {/* Sticky Bottom Input Bar */}
-      <div className="p-4 md:p-6 border-t border-slate-800/80 bg-slate-900/90 backdrop-blur-md">
-        <div className="max-w-3xl mx-auto">
-          {/* Recording indicator */}
-          {isRecording && (
-            <div className="mb-2 px-3 py-1.5 rounded-lg bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                Listening via microphone... Speak your equipment problem clearly.
-              </span>
-              <button
-                onClick={toggleRecording}
-                className="underline text-[11px] text-red-200 hover:text-white"
-              >
-                Stop
-              </button>
-            </div>
-          )}
+      {/* Sticky Bottom Input Bar (Rendered during active conversation) */}
+      {messages.length > 0 && (
+        <div className="sticky bottom-0 z-20 p-4 md:p-6 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
+          <div className="max-w-3xl mx-auto">
+            {isRecording && (
+              <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                  Listening via microphone... Speak your equipment problem clearly.
+                </span>
+                <button
+                  onClick={toggleRecording}
+                  className="underline text-[11px] text-red-200 hover:text-white"
+                >
+                  Stop
+                </button>
+              </div>
+            )}
 
-          <div className="relative flex items-center bg-slate-950 rounded-2xl border border-slate-800 focus-within:border-emerald-500/80 transition-all shadow-inner">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isRecording
-                  ? "Listening to speech..."
-                  : "Ask about an equipment anomaly, vibration, noise, or repair outcome..."
-              }
-              className="w-full px-4 py-3.5 pr-24 bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none max-h-32"
-            />
-
-            <div className="absolute right-2 flex items-center gap-1.5">
-              {/* Voice / Mic Button */}
-              <button
-                type="button"
-                onClick={toggleRecording}
-                disabled={isLoading}
-                title={
-                  !speechSupported
-                    ? "Speech recognition not supported in this browser"
-                    : isRecording
-                    ? "Stop Recording"
-                    : "Speak your problem (Speech-to-Text)"
-                }
-                className={`p-2 rounded-xl transition ${
+            <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all shadow-inner p-1">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
                   isRecording
-                    ? "bg-red-600 text-white animate-pulse"
-                    : speechSupported
-                    ? "text-slate-400 hover:text-white hover:bg-slate-800"
-                    : "text-slate-600 cursor-not-allowed"
-                }`}
-              >
-                {isRecording ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
-              </button>
+                    ? "Listening to speech..."
+                    : "Ask about an equipment anomaly, vibration, noise, or repair outcome..."
+                }
+                className="w-full px-4 py-3 pr-24 bg-transparent text-slate-100 placeholder-slate-500 text-sm focus:outline-none resize-none max-h-32 leading-relaxed"
+              />
 
-              {/* Send Button */}
-              <button
-                type="button"
-                onClick={() => handleSendMessage()}
-                disabled={!inputValue.trim() || isLoading}
-                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 disabled:hover:bg-emerald-600 transition shadow-md shadow-emerald-950/40"
-                title="Send Message"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+              <div className="absolute right-2.5 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  className={`p-2 rounded-xl transition ${
+                    isRecording
+                      ? "bg-red-600 text-white animate-pulse"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  }`}
+                  title={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                >
+                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage()}
+                  disabled={!inputValue.trim() || isLoading}
+                  className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40"
+                  title="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1">
-            <span>
-              RecallOps learns through technician verification. Always follow plant Lockout/Tagout (LOTO).
-            </span>
-            <span className="hidden md:inline font-mono text-[10px]">
-              Groq (openai/gpt-oss-120b) + Hindsight Cloud
-            </span>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

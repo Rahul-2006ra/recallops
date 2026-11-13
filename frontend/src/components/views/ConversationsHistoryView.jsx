@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Bot,
+  Sparkles,
 } from "lucide-react";
 import { listConversations, deleteConversation } from "../../services/api";
 
@@ -19,6 +20,7 @@ export default function ConversationsHistoryView({
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   const fetchConversations = async () => {
     setIsLoading(true);
@@ -41,6 +43,7 @@ export default function ConversationsHistoryView({
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this conversation?")) return;
 
+    setDeletingId(convId);
     try {
       await deleteConversation(convId);
       setConversations((prev) => prev.filter((c) => c.id !== convId));
@@ -48,6 +51,8 @@ export default function ConversationsHistoryView({
     } catch (err) {
       console.error("Failed to delete conversation:", err);
       showToast?.("Failed to delete conversation.", "error");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -61,23 +66,23 @@ export default function ConversationsHistoryView({
       <div className="px-6 py-6 border-b border-slate-800 bg-slate-900/40">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                 <MessageSquare className="w-4 h-4" />
               </div>
               <h1 className="text-xl font-bold tracking-tight text-slate-100">
-                Troubleshooting History
+                Conversation History
               </h1>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
               Resume past diagnostic sessions and review advice generated with episodic memory.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={onNewChat}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white transition shadow-sm"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-sm shadow-emerald-950/40"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Session</span>
@@ -85,7 +90,7 @@ export default function ConversationsHistoryView({
             <button
               onClick={fetchConversations}
               disabled={isLoading}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 transition border border-slate-700/60"
               title="Refresh History"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -95,22 +100,22 @@ export default function ConversationsHistoryView({
       </div>
 
       {/* Search Bar */}
-      <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-900/20">
+      <div className="px-6 py-3.5 border-b border-slate-800/80 bg-slate-900/20">
         <div className="max-w-4xl mx-auto">
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search conversations by title or problem..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+              placeholder="Search conversations by title or equipment problem..."
+              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner"
             />
           </div>
         </div>
       </div>
 
-      {/* List */}
+      {/* Conversation List */}
       <div className="flex-1 px-6 py-6">
         <div className="max-w-4xl mx-auto">
           {isLoading ? (
@@ -125,13 +130,13 @@ export default function ConversationsHistoryView({
               </div>
               <div>
                 <h3 className="font-semibold text-sm text-slate-200">No Past Conversations</h3>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                   Ask a question in the AI Assistant to start your first conversational troubleshooting session.
                 </p>
               </div>
               <button
                 onClick={onNewChat}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white transition inline-flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition inline-flex items-center gap-1.5 shadow-sm shadow-emerald-950/40"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Start Troubleshooting</span>
@@ -143,42 +148,45 @@ export default function ConversationsHistoryView({
                 <div
                   key={conv.id}
                   onClick={() => onSelectConversation(conv.id)}
-                  className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition cursor-pointer flex items-center justify-between group"
+                  className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900 transition cursor-pointer flex items-center justify-between group shadow-sm"
                 >
-                  <div className="space-y-1.5 pr-4 flex-1">
+                  <div className="space-y-1 pr-4 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm text-slate-200 group-hover:text-emerald-300 transition">
-                        {conv.title}
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                        {conv.message_count} msg{conv.message_count === 1 ? "" : "s"}
+                        {conv.title || "Untitled Troubleshooting Session"}
                       </span>
                     </div>
-                    {conv.last_message_preview && (
-                      <p className="text-xs text-slate-400 line-clamp-1">
-                        {conv.last_message_preview}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono">
-                      <span>ID: {conv.id}</span>
-                      <span>•</span>
-                      <span>
-                        Updated {new Date(conv.updated_at).toLocaleDateString()} {new Date(conv.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+
+                    <div className="flex items-center gap-4 text-slate-500 text-xs font-mono">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        {conv.updated_at ? new Date(conv.updated_at).toLocaleDateString([], {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }) : "Recent"}
                       </span>
+                      <span>ID: {conv.id ? conv.id.slice(0, 16) : ""}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={(e) => handleDelete(e, conv.id)}
-                      className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition"
-                      title="Delete Conversation"
+                      disabled={deletingId === conv.id}
+                      className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition"
+                      title="Delete conversation"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-emerald-600 group-hover:text-white transition">
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </div>
+                    <button
+                      onClick={() => onSelectConversation(conv.id)}
+                      className="p-2 rounded-lg text-slate-500 group-hover:text-emerald-400 group-hover:bg-slate-800 transition"
+                      title="Resume conversation"
+                    >
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                    </button>
                   </div>
                 </div>
               ))}
