@@ -26,7 +26,7 @@ def test_scenario_a_mixer_grinder_multiturn():
     assert "EQ-FIELD" in [p["machine_id"] for p in d1["retrieved_precedents"]]
     assert "Plausible Causes" in d1["reply"]
 
-    # Turn 2: Request simpler explanation
+    # Turn 2: Request simpler explanation (Memory cards suppressed on follow-up to keep chat clean)
     r2 = client.post(
         "/api/chat",
         json={
@@ -41,9 +41,8 @@ def test_scenario_a_mixer_grinder_multiturn():
     assert d2["intent"] == "FOLLOWUP_SIMPLIFY"
     assert d2["equipment_detected"] is not None
     assert "Mixer" in d2["equipment_detected"]["equipment_type"]
-    # Precedent preserved from Turn 1 (EQ-FIELD, NOT pump M-104)
-    assert len(d2["retrieved_precedents"]) > 0
-    assert d2["retrieved_precedents"][0]["machine_id"] == "EQ-FIELD"
+    # Precedent cards are suppressed in follow-up responses to prevent repetitive UI clutter
+    assert len(d2["retrieved_precedents"]) == 0
     # Does NOT repeat rigid 4 troubleshooting headers
     assert "Plausible Causes:" not in d2["reply"]
     assert "Relevant Memory Insight:" not in d2["reply"]
@@ -51,7 +50,7 @@ def test_scenario_a_mixer_grinder_multiturn():
     # Does NOT switch to pump
     assert "pump" not in d2["reply"].lower() or "mixer" in d2["reply"].lower()
 
-    # Turn 3: Ask technician question
+    # Turn 3: Ask technician question (Memory cards suppressed on technician follow-up)
     r3 = client.post(
         "/api/chat",
         json={
@@ -65,11 +64,25 @@ def test_scenario_a_mixer_grinder_multiturn():
     assert d3["conversation_id"] == conv_id
     assert d3["intent"] == "FOLLOWUP_TECHNICIAN_QUESTIONS"
     assert "Mixer" in d3["equipment_detected"]["equipment_type"]
-    assert len(d3["retrieved_precedents"]) > 0
-    assert d3["retrieved_precedents"][0]["machine_id"] == "EQ-FIELD"
+    assert len(d3["retrieved_precedents"]) == 0
     # Does NOT repeat 4 headers
     assert "Plausible Causes:" not in d3["reply"]
     assert "Relevant Memory Insight:" not in d3["reply"]
+
+    # Turn 4: Explicit history request -> Memory cards must reappear
+    r4 = client.post(
+        "/api/chat",
+        json={
+            "message": "Has this happened before in our previous repair records?",
+            "conversation_id": conv_id,
+            "mock_memory": True,
+        },
+    )
+    assert r4.status_code == 200
+    d4 = r4.json()
+    assert d4["intent"] == "HISTORY_QUERY"
+    assert len(d4["retrieved_precedents"]) > 0
+    assert d4["retrieved_precedents"][0]["machine_id"] == "EQ-FIELD"
 
 
 def test_scenario_b_equipment_switching_and_pronoun_resolution():
@@ -269,7 +282,7 @@ def test_scenario_e_no_matching_memory_without_fabrication():
 
 
 def test_scenario_f_consistent_memory_provenance():
-    """F. Relevant memory -> follow-up question -> consistent memory provenance."""
+    """F. Relevant memory -> explicit history query -> consistent memory provenance."""
     # Turn 1: Pump issue
     r1 = client.post(
         "/api/chat",
@@ -288,17 +301,18 @@ def test_scenario_f_consistent_memory_provenance():
     label_turn1 = p1["source_label"]
     verif_turn1 = p1["verification_status"]
 
-    # Turn 2: Follow-up question
+    # Turn 2: Explicit query for past repair records
     r2 = client.post(
         "/api/chat",
         json={
-            "message": "Can you explain that more simply?",
+            "message": "What past repair records or history do we have for this machine?",
             "conversation_id": conv_id,
             "mock_memory": True,
         },
     )
     assert r2.status_code == 200
     d2 = r2.json()
+    assert d2["intent"] == "HISTORY_QUERY"
     assert len(d2["retrieved_precedents"]) > 0
     p2 = d2["retrieved_precedents"][0]
 
@@ -307,3 +321,59 @@ def test_scenario_f_consistent_memory_provenance():
     assert p2["source"] == source_turn1
     assert p2["source_label"] == label_turn1
     assert p2["verification_status"] == verif_turn1
+
+
+def test_scenario_g_device_appropriate_safety_household_vs_industrial():
+    """G. Safety guidance distinguishes household appliances (unplug) from industrial (LOTO)."""
+    # Household appliance: Mixer Grinder
+    r_home = client.post(
+        "/api/chat",
+        json={
+            "message": "My mixer grinder suddenly stopped working. How should I inspect it safely?",
+            "mock_memory": True,
+        },
+    )
+    assert r_home.status_code == 200
+    d_home = r_home.json()
+    reply_home = d_home["reply"].lower()
+    # Household must advise unplugging or disconnecting from mains wall outlet
+    assert any(term in reply_home for term in ["unplug", "wall outlet", "disconnect from mains", "power supply"])
+    # Household must NOT tell ordinary consumer to execute industrial Lockout/Tagout at the motor control center
+    assert "lockout/tagout" not in reply_home
+    assert "loto" not in reply_home
+
+    # Industrial equipment: Slurry Pump
+    r_ind = client.post(
+        "/api/chat",
+        json={
+            "message": "Our industrial centrifugal slurry pump is vibrating excessively and overheating.",
+            "mock_memory": True,
+        },
+    )
+    assert r_ind.status_code == 200
+    d_ind = r_ind.json()
+    reply_ind = d_ind["reply"].lower()
+    # Industrial must recommend Lockout/Tagout (LOTO) or de-energizing at the breaker
+    assert any(term in reply_ind for term in ["lockout", "loto", "breaker", "disconnect switch", "zero-energy", "isolated"])
+
+
+def test_scenario_h_calibrated_diagnostic_language():
+    """H. Calibrated language: distinguishes plausible causes from unconfirmed assertions."""
+    r = client.post(
+        "/api/chat",
+        json={
+            "message": "My electric motor is making an unusual grinding noise.",
+            "mock_memory": True,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    reply = data["reply"]
+    # Check calibrated language headers or phrasing
+    assert "Plausible Causes" in reply
+    # Must NOT claim absolute certainty without diagnostic inspection
+    reply_lower = reply.lower()
+    assert "definitely broken" not in reply_lower
+    assert "most common cause" not in reply_lower
+    assert "replacing this usually fixes it" not in reply_lower
+

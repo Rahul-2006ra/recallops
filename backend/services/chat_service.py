@@ -81,6 +81,33 @@ HAZARD_TRIGGERS = [
 
 
 class ChatService:
+    def _get_device_appropriate_hazard(self, category: str, message: str) -> Optional[str]:
+        lower = message.lower()
+        is_household = category in ("household", "electronic")
+
+        if any(k in lower for k in ["4160", "4160v", "arc-flash", "medium voltage"]):
+            return "EXTREME VOLTAGE HAZARD: High voltage (4160V) switchgear requires qualified industrial electrician and arc-flash PPE. Do not approach unshielded equipment."
+        elif any(k in lower for k in ["shock", "spark", "electrical"]):
+            if is_household:
+                return "ELECTRICAL SAFETY: Unplug the appliance immediately from the electrical wall outlet. Do not open energized housings; internal servicing should be handled by an authorized technician."
+            else:
+                return "HIGH ELECTRICAL HAZARD: Ensure all main circuit breakers are locked out and tagged out (LOTO). Do not touch exposed conductors; verify zero voltage before inspection."
+        elif any(k in lower for k in ["gas", "gas leak", "smell gas"]):
+            return "GAS / EXPLOSION HAZARD: Evacuate the area immediately if gas smell is detected; isolate supply valve and contact certified emergency services."
+        elif any(k in lower for k in ["pressure", "psi", "pneumatic"]):
+            if is_household:
+                return "PRESSURE SAFETY: Allow internal chamber to depressurize completely before opening; disconnect power."
+            else:
+                return "HIGH PRESSURE HAZARD: Depressurize and bleed all fluid/pneumatic lines before opening valves or flanges."
+        elif any(k in lower for k in ["steam", "scald"]):
+            return "THERMAL / STEAM HAZARD: Allow lines to cool and verify zero pressure before inspection."
+        elif any(k in lower for k in ["smoke", "fire", "burning"]):
+            if is_household:
+                return "FIRE / SMOKE SAFETY: Unplug the appliance immediately from the electrical outlet. Discontinue use and have it inspected by a service professional."
+            else:
+                return "FIRE / THERMAL HAZARD: Turn off equipment power immediately. Have appropriate fire extinguisher on standby."
+        return None
+
     def create_conversation(self, title: Optional[str] = None) -> dict[str, Any]:
         conv_id = generate_id("CONV")
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -409,14 +436,7 @@ class ChatService:
                     conv_data = self.create_conversation(title=raw_message[:35])
                     conv_id = conv_data["id"]
 
-        # 2. Check hazard keywords
-        detected_hazard: Optional[str] = None
-        for keyword, warning in HAZARD_TRIGGERS:
-            if keyword in raw_message.lower():
-                detected_hazard = warning
-                break
-
-        # 3. Retrieve Conversation History for Multi-Turn Continuity
+        # 2. Retrieve Conversation History for Multi-Turn Continuity
         conversation_history: list[dict[str, Any]] = []
         with get_db() as conn:
             msg_rows = conn.execute(
@@ -438,7 +458,7 @@ class ChatService:
                     "created_at": r["created_at"],
                 })
 
-        # 4. Context Resolution: Detect Equipment & Equipment Switching
+        # 3. Context Resolution: Detect Equipment & Equipment Switching
         lower_msg = raw_message.lower().strip()
         matched_equipment_current: Optional[dict[str, Any]] = None
 
@@ -493,6 +513,10 @@ class ChatService:
 
         detected_equipment = active_equipment
 
+        # 4. Check hazard keywords with device-appropriate safety
+        category = active_equipment.get("category", "industrial") if active_equipment else "industrial"
+        detected_hazard = self._get_device_appropriate_hazard(category, raw_message)
+
         # 5. Detect Intent Adaptively
         # Greetings
         is_greeting = any(lower_msg == g or lower_msg.startswith(g + " ") or lower_msg.startswith(g + "!") or lower_msg.startswith(g + ",") for g in [
@@ -510,6 +534,14 @@ class ChatService:
             "did not work", "failed to fix", "fixed it", "repaired by", "outcome was",
             "problem resolved", "solved the issue", "didn't work", "still not working", "service technician",
             "we replaced", "we changed"
+        ])
+
+        # Explicit request for past repair history or memory records
+        is_explicit_memory_request = any(phrase in lower_msg for phrase in [
+            "what happened", "history", "previous incident", "past repair", "prior repair",
+            "has this happened before", "have we seen this", "show me past", "repair records",
+            "memory records", "precedents", "what was done before", "did anyone fix this before",
+            "past experience", "historical"
         ])
 
         # Simplify follow-up inquiry
@@ -537,7 +569,7 @@ class ChatService:
         is_concept_query = any(lower_msg.startswith(p) for p in [
             "what is a ", "what is an ", "what is ", "what are ",
             "how does a ", "how does an ", "how does ", "define "
-        ]) and not is_outcome_report and not is_simplify and not is_technician_question and not is_followup
+        ]) and not is_outcome_report and not is_simplify and not is_technician_question and not is_followup and not is_explicit_memory_request
 
         # Equipment Troubleshooting Query
         is_troubleshooting = any(phrase in lower_msg for phrase in [
@@ -545,7 +577,7 @@ class ChatService:
             "shutting down", "switching off", "turns off", "shuts off", "tripping", "broken",
             "stopped", "stalled", "not starting", "error", "problem", "fault", "failure", "flutter",
             "won't turn on", "not turning on", "won't start"
-        ]) or (matched_equipment_current is not None and not is_greeting and not is_concept_query and not is_outcome_report)
+        ]) or (matched_equipment_current is not None and not is_greeting and not is_concept_query and not is_outcome_report and not is_explicit_memory_request)
 
         if ambiguity_detected:
             intent = "CLARIFICATION_NEEDED"
@@ -555,6 +587,8 @@ class ChatService:
             intent = "ACKNOWLEDGMENT"
         elif is_outcome_report:
             intent = "REPORT_OUTCOME"
+        elif is_explicit_memory_request:
+            intent = "HISTORY_QUERY"
         elif is_simplify:
             intent = "FOLLOWUP_SIMPLIFY"
         elif is_technician_question:
@@ -567,27 +601,31 @@ class ChatService:
             intent = "TROUBLESHOOTING_QUERY"
         elif is_followup:
             intent = "FOLLOWUP_GENERAL"
-        elif any(phrase in lower_msg for phrase in ["what happened", "history", "previous incident", "past repair"]):
-            intent = "HISTORY_QUERY"
         else:
             intent = "GENERAL_INQUIRY"
 
-        # 6. Retrieve Precedents & Preserve Precedents Across Follow-ups
+        # 6. Retrieve Precedents & Determine Memory Card Visibility
         mock_mode = req.mock_memory if req.mock_memory is not None else settings.HINDSIGHT_MOCK_MODE
-        retrieved_precedents: list[PrecedentRecord] = []
 
-        if intent in ("FOLLOWUP_SIMPLIFY", "FOLLOWUP_TECHNICIAN_QUESTIONS", "FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL"):
-            # Carry forward precedents from previous turn of this active equipment
-            retrieved_precedents = prev_precedents
-        elif intent in ("TROUBLESHOOTING_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
+        active_precedents: list[PrecedentRecord] = []
+        if is_explicit_memory_request and is_followup and prev_precedents:
+            # In an active conversation, asking about history/records refers to the active incident's precedents
+            active_precedents = prev_precedents
+        elif is_explicit_memory_request or intent in ("TROUBLESHOOTING_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
             eq_type = active_equipment["equipment_type"] if active_equipment else None
-            retrieved_precedents = self.retrieve_precedents(
+            active_precedents = self.retrieve_precedents(
                 query=raw_message,
                 mock_mode=mock_mode,
                 equipment_type=eq_type,
             )
-        else:
-            retrieved_precedents = []
+        elif is_followup:
+            active_precedents = prev_precedents
+
+        # Context-aware memory card suppression:
+        # Show precedent cards on initial troubleshooting requests or when user specifically requests past repair evidence.
+        # Do not repeatedly display identical cards for simple follow-ups (simplifications, technician questions, causal inquiries, greetings, acknowledgments).
+        show_memory_cards = (intent == "TROUBLESHOOTING_QUERY" and not is_followup) or is_explicit_memory_request or intent == "HISTORY_QUERY"
+        retrieved_precedents_for_response = active_precedents if show_memory_cards else []
 
         # 7. Extract Outcome Facts with Grounding
         outcome_to_record: Optional[dict[str, Any]] = None
@@ -619,9 +657,9 @@ class ChatService:
         # 8. Build Multi-Turn Context and Groq Prompt
         active_eq_name = active_equipment["equipment_type"] if active_equipment else "the equipment"
         precedent_text = ""
-        if retrieved_precedents:
+        if active_precedents:
             precedent_text = "VERIFIED HISTORICAL PRECEDENTS IN EPISODIC MEMORY:\n"
-            for p in retrieved_precedents:
+            for p in active_precedents:
                 precedent_text += (
                     f"- Machine: {p.machine_id} ({p.equipment_type})\n"
                     f"  Date: {p.verified_at or 'Recorded in plant history'}\n"
@@ -679,11 +717,12 @@ class ChatService:
             system_instruction = (
                 f"You are RecallOps. The user is asking to explain the previously discussed causes or diagnosis for their {active_eq_name} in simpler, everyday words.\n\n"
                 "INSTRUCTIONS:\n"
-                "- Directly explain the most likely causes in simple, plain English without jargon.\n"
-                "- Use a clear, relatable everyday analogy if helpful (for example, an overload trip is like a safety fuse popping when it gets too hot; a capacitor is like a small booster battery that kick-starts the motor).\n"
+                "- Directly explain the most plausible causes in simple, plain English in 2 to 4 short sentences or brief bullets without technical jargon.\n"
+                "- Frame causes as possibilities to inspect, not confirmed defects.\n"
+                "- Use a clear, relatable everyday analogy if helpful (e.g. an overload trip is like a safety fuse tripping when it gets too hot; a capacitor is like a small booster battery that kick-starts the motor).\n"
                 "- Do NOT repeat the four troubleshooting section headers (Plausible Causes, Safety Alert, Relevant Memory Insight, Question for Technician).\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
-                "- Total response must be under 110 words."
+                "- Total response must be under 85 words."
             )
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
@@ -695,11 +734,11 @@ class ChatService:
             system_instruction = (
                 f"You are RecallOps. The user is asking what specific questions they should ask their technician regarding their {active_eq_name}.\n\n"
                 "INSTRUCTIONS:\n"
-                f"- Directly provide 2 to 3 targeted, practical questions the user should ask their technician regarding this {active_eq_name}.\n"
+                f"- Directly provide 2 to 3 targeted, practical questions as concise bullets for the technician regarding this {active_eq_name}.\n"
                 "- Focus on testing and inspecting the specific components discussed in this conversation (such as checking capacitors, overload reset switches, bearings, or wiring).\n"
-                "- Do NOT repeat the four troubleshooting section headers (Plausible Causes, Safety Alert, Relevant Memory Insight, Question for Technician).\n"
+                "- Do NOT repeat the four troubleshooting section headers.\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
-                "- Total response must be under 110 words."
+                "- Total response must be under 85 words."
             )
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
@@ -711,17 +750,35 @@ class ChatService:
             system_instruction = (
                 f"You are RecallOps. The user is asking a follow-up question regarding their {active_eq_name}.\n\n"
                 "INSTRUCTIONS:\n"
-                "- Answer the specific follow-up question directly, accurately, and concisely.\n"
+                "- Answer the specific follow-up question directly, accurately, and concisely in 2 to 4 short sentences.\n"
+                "- Clearly distinguish plausible causes from confirmed faults without claiming a component is definitely defective.\n"
                 "- Explain the underlying physical or electrical mechanism in plain terms.\n"
-                "- Do NOT repeat the four troubleshooting section headers (Plausible Causes, Safety Alert, etc.).\n"
+                "- Do NOT repeat the four troubleshooting section headers.\n"
                 f"- Stay strictly focused on {active_eq_name}.\n"
-                "- Total response must be under 120 words."
+                "- Total response must be under 90 words."
             )
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
                     groq_messages.append({"role": m["role"], "content": m["content"]})
             groq_messages.append({"role": "user", "content": raw_message})
+
+        elif intent == "HISTORY_QUERY":
+            system_instruction = (
+                f"You are RecallOps. The user is specifically asking about past repair history, evidence, or previous incidents for their {active_eq_name}.\n\n"
+                "INSTRUCTIONS:\n"
+                "- In 2 to 3 concise points or short sentences, summarize what past repair records in episodic memory show for this equipment.\n"
+                "- Reference the specific machine ID (e.g. M-112, EQ-FIELD) and state whether the repair succeeded or was unsuccessful.\n"
+                "- If no historical records exist in memory for this equipment, state honestly that no previous repair episodes were found.\n"
+                "- NEVER fabricate false machine IDs, dates, or outcomes.\n"
+                "- Do NOT repeat the four troubleshooting section headers.\n"
+                "- Keep response under 90 words."
+            )
+            groq_messages = [{"role": "system", "content": system_instruction}]
+            for m in conversation_history[-6:]:
+                if m["role"] in ("user", "assistant"):
+                    groq_messages.append({"role": m["role"], "content": m["content"]})
+            groq_messages.append({"role": "user", "content": f"USER INQUIRY ABOUT PAST REPAIR HISTORY: \"{raw_message}\"\n\n{precedent_text}\nProvide your concise response referencing verified memory."})
 
         elif intent == "REPORT_OUTCOME":
             system_instruction = (
@@ -740,14 +797,26 @@ class ChatService:
 
         else:
             # Standard Troubleshooting Query
+            is_household = active_equipment.get("category") in ("household", "electronic") if active_equipment else False
+            device_safety_instruction = (
+                "- Exactly 1 clear precaution recommending unplugging the appliance from the wall outlet and seeking qualified service; never instruct the user to open energized enclosures."
+                if is_household else
+                "- Exactly 1 clear industrial precaution (Lockout/Tagout at the breaker, verify zero energy with certified PPE) before opening covers or rotating parts."
+            )
+
             system_instruction = (
-                "You are RecallOps — an AI industrial troubleshooting assistant that learns from verified real-world experiences.\n"
-                "Communicate simply, crisply, and practically for field technicians and equipment operators.\n\n"
+                "You are RecallOps — an AI industrial & equipment troubleshooting assistant that learns from verified real-world experiences.\n"
+                "Communicate simply, crisply, and practically for equipment operators and technicians.\n\n"
+                "CALIBRATED DIAGNOSTIC LANGUAGE:\n"
+                "- Clearly distinguish plausible causes from confirmed faults.\n"
+                "- Use evidence-calibrated phrases (e.g., 'plausible cause', 'potential contributor', 'inspect to verify').\n"
+                "- NEVER claim a component is definitely defective without physical diagnostic evidence.\n"
+                "- AVOID unsupported claims such as 'the most common cause', 'this is definitely the problem', or 'replacing this usually fixes it'.\n\n"
                 "MANDATORY RESPONSE STRUCTURE:\n"
                 "Plausible Causes:\n"
-                "- 3 to 4 concise, easily understandable bullet points explaining likely root causes in plain English. No dense jargon.\n\n"
+                "- 3 to 4 concise, easily understandable bullet points explaining likely root causes in plain English. Frame them as possibilities to inspect.\n\n"
                 "Safety Alert:\n"
-                "- Exactly 1 clear, necessary safety precaution (Lockout/Tagout, power disconnect, pressure bleed, or PPE) if hazardous electrical, thermal, rotating, or pressurized parts are involved.\n\n"
+                f"{device_safety_instruction}\n\n"
                 "Relevant Memory Insight:\n"
                 f"- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below for {active_eq_name}. Mention the machine ID (e.g. M-112 or EQ-FIELD) and state whether the repair SUCCEEDED or was UNSUCCESSFUL. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
                 "Question for Technician:\n"
@@ -764,7 +833,7 @@ class ChatService:
             groq_user_prompt = (
                 f"USER INQUIRY: \"{raw_message}\"\n\n"
                 f"ACTIVE EQUIPMENT: {active_eq_name}\n"
-                f"IDENTIFIED HAZARD: {detected_hazard or 'Standard electrical and mechanical isolation protocol'}\n\n"
+                f"IDENTIFIED HAZARD: {detected_hazard or ('Household appliance electrical isolation caution' if is_household else 'Standard industrial isolation protocol')}\n\n"
                 f"{precedent_text}\n"
                 f"Provide your concise diagnostic response adhering strictly to the 4 sections above."
             )
@@ -829,7 +898,7 @@ class ChatService:
                 "Can you explain that more simply?",
                 "What if the technician finds no electrical faults?",
             ]
-        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL"):
+        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL", "HISTORY_QUERY"):
             suggested_followups = [
                 "What specific questions should I ask my technician?",
                 "Can you explain in simpler words?",
@@ -842,7 +911,7 @@ class ChatService:
                 "What safety steps must I take before opening the housing?",
             ]
 
-        # 9. Persist messages to SQLite
+        # 10. Persist messages to SQLite
         user_msg_id = generate_id("MSG-USR")
         asst_msg_id = generate_id("MSG-AST")
 
@@ -850,7 +919,7 @@ class ChatService:
             "intent": intent,
             "equipment_detected": detected_equipment,
             "hazard_warning": detected_hazard,
-            "retrieved_precedents": [p.model_dump() for p in retrieved_precedents],
+            "retrieved_precedents": [p.model_dump() for p in active_precedents],
             "outcome_to_record": outcome_to_record,
             "suggested_followups": suggested_followups,
         }
@@ -876,7 +945,7 @@ class ChatService:
             intent=intent,
             equipment_detected=detected_equipment,
             hazard_warning=detected_hazard,
-            retrieved_precedents=retrieved_precedents,
+            retrieved_precedents=retrieved_precedents_for_response,
             outcome_to_record=outcome_to_record,
             suggested_followups=suggested_followups,
             created_at=now_iso,
