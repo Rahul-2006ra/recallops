@@ -1,7 +1,10 @@
 {
-  "timestamp": "2026-11-07T09:18:43.967Z",
+  "timestamp": "2026-11-13T00:44:37.652Z",
   "baseUrl": "https://recallops-lake.vercel.app",
-  "consoleErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 500 ()",
+    "Investigation error: Error: Diagnostic investigation failed: (402)\nReason: Payment Required\nHTTP response headers: <CIMultiDictProxy('Date': 'Fri, 13 Nov 2026 00:44:54 GMT', 'Content-Type': 'application/json', 'Content-Length': '240', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains', 'Via': '1.1 google', 'Alt-Svc': 'h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000')>\nHTTP response body: {\"detail\":\"Insufficient credits. Balance: $0.00, Estimated cost: $0.0004. Please add credits to continue. Top up: https://ui.hindsight.vectorize.io/billing/quick-refill?amount=50&utm_source=api_402&org=6c610a77-7c18-431f-bf05-d2a0ca5e3111\"}\n\n    at Vt (https://recallops-lake.vercel.app/assets/index-DldtRA84.js:126:76087)\n    at async Re (https://recallops-lake.vercel.app/assets/index-DldtRA84.js:126:78721)"
+  ],
   "consoleWarnings": [],
   "failedRequests": [],
   "viewsTested": [
@@ -42,50 +45,12 @@
       "status": "passed"
     }
   ],
-  "responsiveTested": [
-    {
-      "viewport": "mobile_375x812",
-      "width": 375,
-      "height": 812,
-      "hasHorizontalOverflow": false,
-      "screenshot": "responsive_mobile_375x812_overview.png"
-    },
-    {
-      "viewport": "mobile_390x844",
-      "width": 390,
-      "height": 844,
-      "hasHorizontalOverflow": false,
-      "screenshot": "responsive_mobile_390x844_overview.png"
-    },
-    {
-      "viewport": "tablet_768x1024",
-      "width": 768,
-      "height": 1024,
-      "hasHorizontalOverflow": false,
-      "screenshot": "responsive_tablet_768x1024_overview.png"
-    },
-    {
-      "viewport": "laptop_1366x768",
-      "width": 1366,
-      "height": 768,
-      "hasHorizontalOverflow": false,
-      "screenshot": "responsive_laptop_1366x768_overview.png"
-    },
-    {
-      "viewport": "desktop_1920x1080",
-      "width": 1920,
-      "height": 1080,
-      "hasHorizontalOverflow": false,
-      "screenshot": "responsive_desktop_1920x1080_overview.png"
-    }
-  ],
+  "responsiveTested": [],
   "e2eWorkflow": {
-    "incidentSubmitted": true,
-    "investigationGenerated": true,
-    "repairLogged": true,
-    "outcomeVerified": true
+    "incidentSubmitted": true
   },
-  "passed": 20,
-  "failed": 0,
-  "homepageLoadTimeMs": 3752
+  "passed": 9,
+  "failed": 1,
+  "homepageLoadTimeMs": 2469,
+  "executionError": "page.waitForSelector: Timeout 45000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('text=AI Recommendation') to be visible\u001b[22m\n"
 }

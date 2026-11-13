@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import init_db
 from backend.routes.incidents import router as incidents_router
+from backend.routes.chat import router as chat_router
 from backend.services.hindsight_service import hindsight_service
 from backend.services.groq_service import groq_service
 
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RecallOps API",
     description="Backend API for RecallOps — The Self-Learning Industrial Maintenance Agent",
-    version="0.2.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -39,6 +40,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(incidents_router)
+app.include_router(chat_router)
 
 
 @app.get("/", tags=["system"])
@@ -47,7 +49,7 @@ def read_root():
         "project": "RecallOps",
         "description": "The Self-Learning Industrial Maintenance Agent",
         "status": "operational",
-        "version": "0.2.0",
+        "version": "2.0.0",
         "ai_engine": settings.GROQ_MODEL,
         "memory_bank": settings.HINDSIGHT_BANK_ID,
     }

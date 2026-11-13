@@ -32,6 +32,7 @@ class Settings:
     HINDSIGHT_API_KEY: str = os.getenv("HINDSIGHT_API_KEY", "")
     HINDSIGHT_BASE_URL: str = os.getenv("HINDSIGHT_BASE_URL", "https://api.hindsight.vectorize.io")
     HINDSIGHT_BANK_ID: str = os.getenv("HINDSIGHT_BANK_ID", "recallops-demo")
+    HINDSIGHT_MOCK_MODE: bool = os.getenv("HINDSIGHT_MOCK_MODE", "false").lower() in ("true", "1", "yes")
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./recallops.db")

@@ -1,151 +1,173 @@
 import React, { useState } from "react";
+import {
+  Sparkles,
+  Database,
+  History,
+  Settings,
+  Plus,
+  Menu,
+  X,
+  Layers,
+  ArrowLeft,
+  Shield,
+} from "lucide-react";
 
 export default function Navbar({
   activeTab,
   onTabChange,
   backendHealth,
-  onOpenReportModal,
+  onNewChat,
+  isLegacyMode,
+  mockMemoryMode,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navItems = [
-    { id: "overview", label: "Overview", icon: "hub" },
-    { id: "ai-investigations", label: "AI Investigations", icon: "psychology" },
-    { id: "hindsight-memory", label: "Hindsight Memory", icon: "history_toggle_off" },
-    { id: "learning-benchmark", label: "Learning Benchmark", icon: "compare_arrows" },
-    { id: "incidents", label: "Incidents", icon: "warning" },
-    { id: "machines", label: "Machines", icon: "precision_manufacturing" },
+  const primaryNavItems = [
+    { id: "assistant", label: "AI Assistant", icon: Sparkles },
+    { id: "memories", label: "My Memories", icon: Database },
+    { id: "history", label: "History", icon: History },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   const isOnline = backendHealth?.status === "healthy" || backendHealth?.status === "ok";
 
+  const handleNavClick = (tabId) => {
+    onTabChange(tabId);
+    setMobileMenuOpen(false);
+  };
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl border-b border-outline-variant/30 shadow-[0_4px_20px_-4px_rgba(8,14,29,0.8)]">
-      <div className="h-16 w-full px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 shadow-md">
+      <div className="h-16 w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Brand Logo & Title */}
-        <div className="flex items-center gap-6 xl:gap-8">
+        <div className="flex items-center gap-6">
           <button
-            onClick={() => onTabChange("overview")}
+            onClick={() => handleNavClick("assistant")}
             className="flex items-center gap-2.5 group focus:outline-none cursor-pointer text-left"
           >
-            <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center border border-primary-container/30 shadow-[0_0_12px_rgba(13,242,200,0.2)] group-hover:border-primary-container transition-all">
-              <span className="material-symbols-outlined text-primary-container text-[20px]">
-                hub
-              </span>
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-950/40 group-hover:scale-105 transition-all">
+              <Sparkles className="w-4 h-4 fill-slate-950" />
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="font-headline-sm text-headline-sm font-semibold tracking-tight text-on-surface">
-                Recall<span className="text-primary-container">Ops</span>
+              <span className="text-lg font-bold tracking-tight text-white">
+                Recall<span className="text-emerald-400">Ops</span>
               </span>
-              <span className="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-mono">
-                v4.2
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+                2.0
               </span>
             </div>
           </button>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1.5 h-16">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onTabChange(item.id)}
-                  className={`relative px-3 py-1.5 rounded-lg font-title-sm text-title-sm transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? "bg-primary-container text-on-primary-container font-semibold shadow-[0_0_12px_rgba(13,242,200,0.35)]"
-                      : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-                  }`}
-                >
-                  <span className={`material-symbols-outlined text-[17px] ${isActive ? "text-on-primary-container" : "text-outline"}`}>
-                    {item.icon}
-                  </span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          {/* Return from Legacy Fleet pill if applicable */}
+          {isLegacyMode ? (
+            <button
+              onClick={() => handleNavClick("assistant")}
+              className="hidden md:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to AI Assistant</span>
+            </button>
+          ) : (
+            /* Desktop Navigation Tabs */
+            <nav className="hidden md:flex items-center gap-1">
+              {primaryNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                      isActive
+                        ? "bg-slate-800 text-emerald-400 border border-slate-700/80 shadow-inner"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? "text-emerald-400" : "text-slate-500"}`} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          )}
         </div>
 
-        {/* Right Telemetry Badge & Quick Actions */}
+        {/* Right Header Controls */}
         <div className="flex items-center gap-3">
-          {/* Telemetry Status Pill */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded bg-surface-container-high border border-primary-container/20">
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isOnline ? "bg-primary-container" : "bg-rose-400"}`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? "bg-primary-container shadow-[0_0_8px_rgba(13,242,200,0.8)]" : "bg-rose-500"}`}></span>
+          {/* Status Pills */}
+          <div className="hidden sm:flex items-center gap-2">
+            <span
+              className={`text-[11px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${
+                isOnline
+                  ? "bg-emerald-950/60 border-emerald-800/60 text-emerald-400"
+                  : "bg-amber-950/60 border-amber-800/60 text-amber-400"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isOnline ? "bg-emerald-400" : "bg-amber-400 animate-ping"
+                }`}
+              ></span>
+              {isOnline ? "System Ready" : "Connecting"}
             </span>
-            <span className="font-label-sm text-label-sm uppercase text-secondary tracking-widest font-semibold">
-              {isOnline ? "Hindsight Memory Active" : "Backend Offline"}
-            </span>
+
+            {mockMemoryMode && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1">
+                <Shield className="w-3 h-3 text-emerald-400" />
+                Protected
+              </span>
+            )}
           </div>
 
-          {/* Report Incident CTA Button */}
+          {/* Quick Action: New Chat */}
           <button
-            onClick={onOpenReportModal}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary-container text-on-primary-container font-title-sm text-title-sm font-semibold shadow-[0_0_16px_rgba(13,242,200,0.3)] hover:shadow-[0_0_22px_rgba(13,242,200,0.5)] transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            onClick={onNewChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-sm"
           >
-            <span className="material-symbols-outlined text-[17px]">add</span>
-            <span>Report Incident</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">New Chat</span>
           </button>
 
-          {/* Mobile Menu Toggle Button */}
+          {/* Mobile Menu Toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-lg bg-surface-container-high text-on-surface hover:text-primary-container focus:outline-none cursor-pointer"
-            aria-label="Toggle Navigation Menu"
+            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900"
           >
-            <span className="material-symbols-outlined text-[22px]">
-              {mobileMenuOpen ? "close" : "menu"}
-            </span>
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-surface-container border-b border-outline-variant/30 px-4 py-3 flex flex-col gap-1.5 shadow-2xl animate-in slide-in-from-top-2 duration-150">
-          {navItems.map((item) => {
+        <div className="md:hidden border-t border-slate-800 bg-slate-950 px-4 py-3 space-y-1 shadow-2xl">
+          {isLegacyMode && (
+            <button
+              onClick={() => handleNavClick("assistant")}
+              className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white flex items-center gap-2 mb-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to AI Assistant</span>
+            </button>
+          )}
+          {primaryNavItems.map((item) => {
+            const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  onTabChange(item.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full px-3 py-2 rounded-lg text-left font-title-sm text-title-sm flex items-center justify-between cursor-pointer ${
+                onClick={() => handleNavClick(item.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-medium flex items-center gap-2.5 ${
                   isActive
-                    ? "bg-primary-container text-on-primary-container font-semibold"
-                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                    ? "bg-slate-800 text-emerald-400 font-semibold"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px]">
-                    {item.icon}
-                  </span>
-                  <span>{item.label}</span>
-                </div>
-                {isActive && (
-                  <span className="material-symbols-outlined text-[16px]">
-                    check
-                  </span>
-                )}
+                <Icon className="w-4 h-4" />
+                <span>{item.label}</span>
               </button>
             );
           })}
-          <div className="pt-2 mt-1 border-t border-outline-variant/20 flex items-center justify-between">
-            <button
-              onClick={() => {
-                onOpenReportModal();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full py-2 px-3 rounded-lg bg-primary-container text-on-primary-container font-title-sm text-title-sm font-semibold flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              <span>Report Incident</span>
-            </button>
-          </div>
         </div>
       )}
     </header>

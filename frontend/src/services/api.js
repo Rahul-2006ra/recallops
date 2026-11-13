@@ -117,6 +117,66 @@ export async function verifyOutcome(incidentOrId, data) {
   return handleResponse(res);
 }
 
+// =============================================================================
+// RecallOps 2.0 Conversational AI & Episodic Memory Endpoints
+// =============================================================================
+
+export async function sendChatMessage(data) {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function listConversations() {
+  const res = await fetch(`${API_BASE}/api/conversations`);
+  return handleResponse(res);
+}
+
+export async function getConversation(conversationId) {
+  const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(conversationId)}`);
+  return handleResponse(res);
+}
+
+export async function deleteConversation(conversationId) {
+  const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(conversationId)}`, {
+    method: "DELETE",
+  });
+  return handleResponse(res);
+}
+
+export async function recordOutcome(data) {
+  const res = await fetch(`${API_BASE}/api/chat/record-outcome`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(res);
+}
+
+export async function listMemories(params = {}) {
+  const query = new URLSearchParams();
+  if (params.q) query.append("q", params.q);
+  if (params.equipment_type) query.append("equipment_type", params.equipment_type);
+  if (params.outcome_status) query.append("outcome_status", params.outcome_status);
+  if (params.limit) query.append("limit", params.limit);
+  const url = `${API_BASE}/api/memories${query.toString() ? `?${query.toString()}` : ""}`;
+  const res = await fetch(url);
+  return handleResponse(res);
+}
+
+export async function getMemoryDetails(memoryId) {
+  const res = await fetch(`${API_BASE}/api/memories/${encodeURIComponent(memoryId)}`);
+  return handleResponse(res);
+}
+
+export async function getChatStatus() {
+  const res = await fetch(`${API_BASE}/api/chat/status`);
+  return handleResponse(res);
+}
+
 export const api = {
   checkHealth,
   getHealth,
@@ -129,6 +189,14 @@ export const api = {
   logRepair,
   recordRepair,
   verifyOutcome,
+  sendChatMessage,
+  listConversations,
+  getConversation,
+  deleteConversation,
+  recordOutcome,
+  listMemories,
+  getMemoryDetails,
+  getChatStatus,
 };
 
 export default api;

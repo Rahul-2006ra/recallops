@@ -2,7 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 
-// Six Stitch Views
+// RecallOps 2.0 Conversational Views
+import ChatAssistantView from "./components/views/ChatAssistantView";
+import MemoriesView from "./components/views/MemoriesView";
+import ConversationsHistoryView from "./components/views/ConversationsHistoryView";
+import SettingsView from "./components/views/SettingsView";
+
+// Legacy Industrial Fleet Views (Preserved for secondary deep inspection)
 import HomeView from "./components/views/HomeView";
 import InvestigationResultsView from "./components/views/InvestigationResultsView";
 import HindsightMemoryView from "./components/views/HindsightMemoryView";
@@ -26,14 +32,27 @@ import {
   checkHealth,
 } from "./services/api";
 
+const LEGACY_TABS = [
+  "overview",
+  "ai-investigations",
+  "hindsight-memory",
+  "learning-benchmark",
+  "incidents",
+  "machines",
+];
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState("overview");
+  // RecallOps 2.0 Default Landing Experience: AI Assistant
+  const [activeTab, setActiveTab] = useState("assistant");
+  const [activeConversationId, setActiveConversationId] = useState(null);
+  const [mockMemoryMode, setMockMemoryMode] = useState(true); // Default ON to preserve $5 hackathon balance
+
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [incidentDetails, setIncidentDetails] = useState(null);
   const [systemHealth, setSystemHealth] = useState(null);
 
-  const [isLoadingIncidents, setIsLoadingIncidents] = useState(true);
+  const [isLoadingIncidents, setIsLoadingIncidents] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isInvestigating, setIsInvestigating] = useState(false);
 
@@ -45,16 +64,14 @@ export default function App() {
 
   // Notification Toast state
   const [toast, setToast] = useState(null);
-
-  // Investigation Error state
   const [investigationError, setInvestigationError] = useState(null);
 
-  const showToast = (message, type = "success") => {
+  const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
     }, 4500);
-  };
+  }, []);
 
   // Fetch full incident details
   const loadIncidentDetails = useCallback(async (incidentId) => {
@@ -69,7 +86,7 @@ export default function App() {
     } finally {
       setIsLoadingDetails(false);
     }
-  }, []);
+  }, [showToast]);
 
   // Fetch all incidents
   const fetchAllIncidents = useCallback(
@@ -84,7 +101,6 @@ export default function App() {
             toSelect = data.find((i) => i.id === preferredSelectId);
           }
           if (!toSelect) {
-            // Default to M-112 or first investigated incident for dramatic demo centerpiece
             toSelect =
               data.find((i) => i.machine_id === "M-112") ||
               data.find((i) => i.status !== "REPORTED") ||
@@ -95,7 +111,6 @@ export default function App() {
         }
       } catch (err) {
         console.error("Failed to fetch incidents:", err);
-        showToast("Could not connect to RecallOps backend.", "error");
       } finally {
         setIsLoadingIncidents(false);
       }
@@ -112,7 +127,6 @@ export default function App() {
     fetchAllIncidents();
   }, [fetchAllIncidents]);
 
-  // When user selects an incident
   const handleSelectIncident = (incidentOrId) => {
     let incident = null;
     let incidentId = null;
@@ -125,17 +139,13 @@ export default function App() {
       incident = incidents.find((i) => i.id === incidentOrId) || null;
     }
 
-    if (incident) {
-      setSelectedIncident(incident);
-    }
+    if (incident) setSelectedIncident(incident);
     if (incidentId) {
       loadIncidentDetails(incidentId);
-      // Clear investigation error when switching to another incident
       setInvestigationError((prev) => (prev && prev.incidentId !== incidentId ? null : prev));
     }
   };
 
-  // Run AI investigation
   const handleInvestigate = async (incidentOrId) => {
     let id = null;
     if (typeof incidentOrId === "object" && incidentOrId !== null) {
@@ -150,7 +160,7 @@ export default function App() {
     }
 
     if (!id) {
-      showToast("No incident ID provided for investigation.", "error");
+      showToast("Please select an incident to investigate.", "error");
       return;
     }
 
@@ -158,52 +168,29 @@ export default function App() {
     setInvestigationError(null);
     try {
       await investigateIncident(id);
-      showToast("Diagnostic investigation completed via Groq & Hindsight Cloud!", "success");
-      setInvestigationError(null);
-      await fetchAllIncidents(id);
+      showToast("AI Diagnostic Investigation complete with episodic recall!", "success");
       await loadIncidentDetails(id);
+      await fetchAllIncidents(id);
     } catch (err) {
-      console.error("Investigation error:", err);
-      const isMemoryUnavailable =
+      console.error("Investigation failed:", err);
+      const isQuotaError =
+        err?.status === 402 ||
         err?.status === 503 ||
         err?.errorCode === "MEMORY_SERVICE_CREDITS_EXHAUSTED" ||
-        err?.errorCode === "MEMORY_SERVICE_UNAVAILABLE" ||
-        err?.errorCode === "MEMORY_SERVICE_UNEXPECTED_ERROR" ||
-        (err?.message && err.message.toLowerCase().includes("memory")) ||
-        (err?.message && err.message.toLowerCase().includes("hindsight"));
+        err?.message?.includes("credit quota") ||
+        err?.message?.includes("402");
 
-      const userMessage = err?.message || "Diagnostic investigation failed. Check backend logs.";
       setInvestigationError({
         incidentId: id,
-        isMemoryUnavailable,
-        errorCode: err?.errorCode || (err?.status === 503 ? "MEMORY_SERVICE_UNAVAILABLE" : "INVESTIGATION_FAILED"),
-        message: userMessage,
+        message: err.message,
+        isQuotaError,
       });
-      showToast(userMessage, "error");
+      showToast(err.message || "Failed to run AI investigation.", "error");
     } finally {
       setIsInvestigating(false);
     }
   };
 
-  // Start Investigation from Homepage prompt input
-  const handleStartInvestigationFromHome = async (formData) => {
-    try {
-      const created = await createIncident(formData);
-      showToast(`Incident ${created.id} registered. Running autonomous AI investigation...`, "success");
-      await fetchAllIncidents(created.id);
-      setSelectedIncident(created);
-      setActiveTab("ai-investigations");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-
-      // Trigger actual AI investigation immediately
-      await handleInvestigate(created.id);
-    } catch (err) {
-      console.error("Start investigation error:", err);
-      showToast("Failed to initiate investigation.", "error");
-    }
-  };
-
-  // Open modals
   const handleOpenRepair = (incident) => {
     setModalTargetIncident(incident || selectedIncident);
     setIsRepairModalOpen(true);
@@ -214,69 +201,83 @@ export default function App() {
     setIsVerifyModalOpen(true);
   };
 
-  // Modal submissions
   const handleReportSubmit = async (formData) => {
-    const created = await createIncident(formData);
-    showToast(`Incident ${created.id} registered successfully!`, "success");
-    await fetchAllIncidents(created.id);
-    setSelectedIncident(created);
-    setActiveTab("ai-investigations");
-  };
-
-  const handleRepairSubmit = async (incidentId, payload) => {
-    await logRepair(incidentId, payload);
-    showToast("Physical repair action logged into audit history.", "success");
-    await fetchAllIncidents(incidentId);
-    await loadIncidentDetails(incidentId);
-  };
-
-  const handleVerifySubmit = async (incidentId, payload) => {
     try {
-      const res = await verifyOutcome(incidentId, payload);
-      if (res && res.hindsight_retained === true) {
-        showToast("Outcome verified and saved to Hindsight Cloud.", "success");
-      } else {
-        showToast("Outcome verified locally. Cloud memory was not saved.", "warning");
-      }
-      await fetchAllIncidents(incidentId);
-      await loadIncidentDetails(incidentId);
-      return res;
+      const created = await createIncident(formData);
+      showToast(`Incident ${created.id} reported successfully!`, "success");
+      setIsReportModalOpen(false);
+      await fetchAllIncidents(created.id);
+      setActiveTab("ai-investigations");
     } catch (err) {
-      console.error("Verification error:", err);
-      showToast(err?.message || "Failed to verify repair outcome.", "error");
-      throw err;
+      console.error("Failed to report incident:", err);
+      showToast(err.message || "Failed to submit incident report.", "error");
     }
   };
 
+  const handleRepairSubmit = async (repairData) => {
+    if (!modalTargetIncident) return;
+    try {
+      await logRepair(modalTargetIncident.id, repairData);
+      showToast("Physical field repair logged successfully!", "success");
+      setIsRepairModalOpen(false);
+      await loadIncidentDetails(modalTargetIncident.id);
+      await fetchAllIncidents(modalTargetIncident.id);
+    } catch (err) {
+      console.error("Failed to log repair:", err);
+      showToast(err.message || "Failed to record repair log.", "error");
+    }
+  };
+
+  const handleVerifySubmit = async (verifyData) => {
+    if (!modalTargetIncident) return;
+    try {
+      const res = await verifyOutcome(modalTargetIncident.id, verifyData);
+      if (res.hindsight_retained) {
+        showToast("Outcome verified and retained in Hindsight Cloud!", "success");
+      } else {
+        showToast("Outcome verified and recorded in plant audit log.", "info");
+      }
+      setIsVerifyModalOpen(false);
+      await loadIncidentDetails(modalTargetIncident.id);
+      await fetchAllIncidents(modalTargetIncident.id);
+    } catch (err) {
+      console.error("Failed to verify outcome:", err);
+      showToast(err.message || "Failed to verify outcome.", "error");
+    }
+  };
+
+  const isLegacyMode = LEGACY_TABS.includes(activeTab);
+
+  const handleNewChat = () => {
+    setActiveConversationId(null);
+    setActiveTab("assistant");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSelectConversationFromHistory = (convId) => {
+    setActiveConversationId(convId);
+    setActiveTab("assistant");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="min-h-screen bg-surface text-on-surface flex flex-col font-body antialiased">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg shadow-2xl border flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200 ${
-            toast.type === "success"
-              ? "bg-surface-container-high text-on-surface border-primary-container/40 shadow-[0_0_16px_rgba(13,242,200,0.25)]"
-              : toast.type === "warning"
-              ? "bg-surface-container-high text-on-surface border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.25)]"
-              : "bg-surface-container-high text-error border-error/40 shadow-[0_0_16px_rgba(244,63,94,0.25)]"
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border text-xs font-medium transition-all transform animate-in fade-in slide-in-from-bottom-3 duration-200 ${
+            toast.type === "error"
+              ? "bg-rose-950/95 text-rose-200 border-rose-800"
+              : toast.type === "info"
+              ? "bg-blue-950/95 text-blue-200 border-blue-800"
+              : "bg-emerald-950/95 text-emerald-200 border-emerald-800"
           }`}
         >
-          <span
-            className={`material-symbols-outlined text-[18px] ${
-              toast.type === "success"
-                ? "text-primary-container"
-                : toast.type === "warning"
-                ? "text-amber-400"
-                : "text-error"
-            }`}
-          >
-            {toast.type === "success" ? "check_circle" : toast.type === "warning" ? "warning" : "error"}
-          </span>
           <span>{toast.message}</span>
         </div>
       )}
 
-      {/* Persistent Top Navbar (Tactile Industrial Memory) */}
+      {/* Modern RecallOps 2.0 Navigation Bar */}
       <Navbar
         activeTab={activeTab}
         onTabChange={(tab) => {
@@ -284,112 +285,131 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         backendHealth={systemHealth}
-        onOpenReportModal={() => setIsReportModalOpen(true)}
+        onNewChat={handleNewChat}
+        isLegacyMode={isLegacyMode}
+        mockMemoryMode={mockMemoryMode}
       />
 
-      {/* Main Content Workspace */}
-      <main className="w-full pt-16 flex-1 min-h-[calc(100vh-64px)] flex flex-col">
-        {isLoadingIncidents && incidents.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-16 gap-3 text-on-surface-variant">
-            <span className="material-symbols-outlined text-[36px] animate-spin text-primary-container">
-              sync
-            </span>
-            <span className="text-xs font-mono font-semibold tracking-wider">
-              CONNECTING TO RECALLOPS DIAGNOSTIC ENGINE...
-            </span>
-          </div>
-        ) : (
-          <>
-            {/* Screen 1: Homepage */}
-            {activeTab === "overview" && (
-              <HomeView
-                incidents={incidents}
-                onStartInvestigation={handleStartInvestigationFromHome}
-                onOpenReportModal={() => setIsReportModalOpen(true)}
-                onNavigateTab={(tab) => {
-                  setActiveTab(tab);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                onSelectIncident={(inc) => {
-                  handleSelectIncident(inc);
-                  setActiveTab("ai-investigations");
-                }}
-              />
-            )}
+      {/* Main View Area */}
+      <main className="flex-1 flex flex-col relative overflow-hidden">
+        {/* ========================================================================= */}
+        {/* RecallOps 2.0 PRIMARY SCREENS                                             */}
+        {/* ========================================================================= */}
 
-            {/* Screen 2: Investigation Results */}
-            {activeTab === "ai-investigations" && (
-              <InvestigationResultsView
-                selectedIncident={selectedIncident}
-                incidentDetails={incidentDetails}
-                isLoadingDetails={isLoadingDetails}
-                isInvestigating={isInvestigating}
-                onInvestigateClick={handleInvestigate}
-                onOpenRepairModal={handleOpenRepair}
-                onOpenVerifyModal={handleOpenVerify}
-                allIncidents={incidents}
-                onSelectIncident={handleSelectIncident}
-                investigationError={investigationError}
-              />
-            )}
+        {activeTab === "assistant" && (
+          <ChatAssistantView
+            activeConversationId={activeConversationId}
+            setActiveConversationId={setActiveConversationId}
+            mockMemoryMode={mockMemoryMode}
+            showToast={showToast}
+          />
+        )}
 
-            {/* Screen 3: Learning Benchmark */}
-            {activeTab === "learning-benchmark" && (
-              <BenchmarkView />
-            )}
+        {activeTab === "memories" && (
+          <MemoriesView mockMemoryMode={mockMemoryMode} showToast={showToast} />
+        )}
 
-            {/* Screen 4: Hindsight Memory */}
-            {activeTab === "hindsight-memory" && (
-              <HindsightMemoryView
-                incidents={incidents}
-                systemHealth={systemHealth}
-              />
-            )}
+        {activeTab === "history" && (
+          <ConversationsHistoryView
+            onSelectConversation={handleSelectConversationFromHistory}
+            onNewChat={handleNewChat}
+            showToast={showToast}
+          />
+        )}
 
-            {/* Screen 5: Incidents */}
-            {activeTab === "incidents" && (
-              <IncidentsView
-                incidents={incidents}
-                onSelectIncident={(inc) => {
-                  handleSelectIncident(inc);
-                  setActiveTab("ai-investigations");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                onOpenReportModal={() => setIsReportModalOpen(true)}
-                onOpenInvestigation={(inc) => {
-                  handleSelectIncident(inc);
-                  setActiveTab("ai-investigations");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                onOpenRepairModal={handleOpenRepair}
-                onOpenVerifyModal={handleOpenVerify}
-              />
-            )}
+        {activeTab === "settings" && (
+          <SettingsView
+            mockMemoryMode={mockMemoryMode}
+            setMockMemoryMode={setMockMemoryMode}
+            onOpenLegacyFleetView={() => setActiveTab("overview")}
+            showToast={showToast}
+          />
+        )}
 
-            {/* Screen 6: Machines */}
-            {activeTab === "machines" && (
-              <MachinesView
-                incidents={incidents}
-                onSelectIncident={(inc) => {
-                  handleSelectIncident(inc);
-                  setActiveTab("ai-investigations");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                onOpenReportModal={() => setIsReportModalOpen(true)}
-                onNavigateTab={(tab) => {
-                  setActiveTab(tab);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              />
-            )}
-          </>
+        {/* ========================================================================= */}
+        {/* SECONDARY PRESERVED SCREENS (Legacy Plant Operations Console)             */}
+        {/* ========================================================================= */}
+
+        {activeTab === "overview" && (
+          <HomeView
+            incidents={incidents}
+            onStartInvestigation={(inc) => {
+              handleSelectIncident(inc);
+              setActiveTab("ai-investigations");
+            }}
+            onOpenReportModal={() => setIsReportModalOpen(true)}
+            onNavigateTab={(tab) => {
+              setActiveTab(tab);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onSelectIncident={(inc) => {
+              handleSelectIncident(inc);
+              setActiveTab("ai-investigations");
+            }}
+          />
+        )}
+
+        {activeTab === "ai-investigations" && (
+          <InvestigationResultsView
+            selectedIncident={selectedIncident}
+            incidentDetails={incidentDetails}
+            isLoadingDetails={isLoadingDetails}
+            isInvestigating={isInvestigating}
+            onInvestigateClick={handleInvestigate}
+            onOpenRepairModal={handleOpenRepair}
+            onOpenVerifyModal={handleOpenVerify}
+            allIncidents={incidents}
+            onSelectIncident={handleSelectIncident}
+            investigationError={investigationError}
+          />
+        )}
+
+        {activeTab === "learning-benchmark" && <BenchmarkView />}
+
+        {activeTab === "hindsight-memory" && (
+          <HindsightMemoryView incidents={incidents} systemHealth={systemHealth} />
+        )}
+
+        {activeTab === "incidents" && (
+          <IncidentsView
+            incidents={incidents}
+            onSelectIncident={(inc) => {
+              handleSelectIncident(inc);
+              setActiveTab("ai-investigations");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onOpenReportModal={() => setIsReportModalOpen(true)}
+            onOpenInvestigation={(inc) => {
+              handleSelectIncident(inc);
+              setActiveTab("ai-investigations");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onOpenRepairModal={handleOpenRepair}
+            onOpenVerifyModal={handleOpenVerify}
+          />
+        )}
+
+        {activeTab === "machines" && (
+          <MachinesView
+            incidents={incidents}
+            onSelectIncident={(inc) => {
+              handleSelectIncident(inc);
+              setActiveTab("ai-investigations");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onOpenReportModal={() => setIsReportModalOpen(true)}
+            onNavigateTab={(tab) => {
+              setActiveTab(tab);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         )}
       </main>
 
-      {/* Persistent Industrial Footer */}
+      {/* Persistent Footer */}
       <Footer backendHealth={systemHealth} />
 
-      {/* Interactive Lifecycle Action Modals */}
+      {/* Lifecycle Action Modals */}
       <ReportIncidentModal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
