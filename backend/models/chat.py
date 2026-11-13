@@ -74,6 +74,8 @@ class RecordOutcomeRequest(BaseModel):
     conversation_id: Optional[str] = None
     live_retain: Optional[bool] = False
     idempotency_key: Optional[str] = None
+    episode_id: Optional[str] = None
+    verification_source: Optional[str] = None
 
 
 class RecordOutcomeResponse(BaseModel):

@@ -158,6 +158,46 @@ def init_db():
             """
         )
 
+        # Problem Episodes Table for Cross-Conversation Problem Resolution
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS problem_episodes (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                user_scope TEXT NOT NULL DEFAULT 'default_user',
+                equipment_name TEXT NOT NULL,
+                equipment_category TEXT DEFAULT 'general',
+                symptoms TEXT NOT NULL,
+                original_description TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'unresolved',
+                resolution_action TEXT,
+                resolved_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+            );
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_problem_episodes_scope_status 
+            ON problem_episodes(user_scope, status);
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_problem_episodes_equipment 
+            ON problem_episodes(equipment_name);
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_problem_episodes_conversation 
+            ON problem_episodes(conversation_id);
+            """
+        )
+
         conn.commit()
 
 

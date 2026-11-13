@@ -35,6 +35,12 @@ def send_chat_message(req: ChatRequest):
         raise HTTPException(status_code=500, detail="Failed to generate AI troubleshooting response.")
 
 
+@router.post("/conversations", summary="Create new conversation")
+def create_conversation(payload: Optional[dict] = None):
+    title = payload.get("title") if payload else None
+    return chat_service.create_conversation(title=title)
+
+
 @router.get("/conversations", response_model=list[ConversationResponse], summary="List past conversations")
 def list_conversations():
     """Retrieve all prior troubleshooting conversations ordered by most recent."""

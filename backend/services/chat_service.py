@@ -31,7 +31,7 @@ def generate_id(prefix: str) -> str:
     return f"{prefix}-{timestamp}-{unique}"
 
 
-# Quick keyword matcher for industrial & domestic equipment
+# Quick keyword matcher for industrial, domestic, electronic, and everyday equipment
 EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "centrifugal slurry pump": ("Centrifugal Slurry Pump", "industrial"),
     "reciprocating air compressor": ("Reciprocating Air Compressor", "industrial"),
@@ -69,7 +69,84 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "boiler": ("Industrial Boiler", "industrial"),
     "conveyor": ("Belt Conveyor System", "industrial"),
     "press": ("Hydraulic Stamping Press", "industrial"),
+    # Personal, household & everyday equipment (open-ended support)
+    "power bank": ("Power Bank", "electronic"),
+    "powerbank": ("Power Bank", "electronic"),
+    "umbrella": ("Umbrella", "household"),
+    "window": ("Window", "household"),
+    "drone": ("Drone", "electronic"),
+    "bicycle": ("Bicycle", "household"),
+    "bike": ("Bicycle", "household"),
+    "headphones": ("Headphones", "electronic"),
+    "headphone": ("Headphones", "electronic"),
+    "earbuds": ("Earbuds", "electronic"),
+    "earphones": ("Earphones", "electronic"),
+    "smartphone": ("Smartphone", "electronic"),
+    "phone": ("Smartphone", "electronic"),
+    "tablet": ("Tablet", "electronic"),
+    "keyboard": ("Keyboard", "electronic"),
+    "mouse": ("Computer Mouse", "electronic"),
+    "printer": ("Printer", "electronic"),
+    "vacuum cleaner": ("Vacuum Cleaner", "household"),
+    "vacuum": ("Vacuum Cleaner", "household"),
+    "air conditioner": ("Air Conditioner", "household"),
+    "ac": ("Air Conditioner", "household"),
+    "toaster": ("Toaster", "household"),
+    "kettle": ("Electric Kettle", "household"),
+    "blender": ("Blender", "household"),
+    "dishwasher": ("Dishwasher", "household"),
+    "ceiling fan": ("Ceiling Fan", "household"),
+    "fan": ("Fan", "household"),
+    "door lock": ("Door Lock Mechanism", "household"),
+    "door": ("Door Hinge / Mechanism", "household"),
+    "lock": ("Lock Mechanism", "household"),
 }
+
+
+def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
+    """Detect equipment from explicit keywords or dynamic open-ended phrasing."""
+    lower = text.lower().strip()
+    sorted_keywords = sorted(EQUIPMENT_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
+    for kw, (eq_name, category) in sorted_keywords:
+        if re.search(r'\b' + re.escape(kw) + r'\b', lower) or kw in lower:
+            return {
+                "equipment_type": eq_name,
+                "category": category,
+                "matched_keyword": kw,
+            }
+
+    # Dynamic open-ended equipment extraction for phrasing like:
+    # "my umbrella won't open", "the window is stuck", "our power bank is dead", "my electric bicycle"
+    # Must only match when accompanied by a problem indicator (not for follow-up questions)
+    has_problem_indicator = any(w in lower for w in [
+        "won't", "wont", "not working", "stopped", "stuck", "broken", "faulty", "creak", "creaking",
+        "overheat", "vibrat", "leaking", "smoke", "dead", "shut off", "shuts off", "tripped", "failing",
+        "making noise", "unusual noise", "grinding", "sparking", "blown", "not charging"
+    ])
+    if has_problem_indicator:
+        m = re.search(r'\b(?:my|the|our)\s+([a-zA-Z]{3,}(?:\s+[a-zA-Z]{3,})?)\b', lower)
+        if m:
+            candidate = m.group(1).strip()
+            non_equipment_words = {
+                "technician", "problem", "fault", "issue", "question", "friend", "girlfriend", "boyfriend",
+                "day", "car", "name", "boss", "opinion", "screen", "repair", "idea", "thoughts",
+                "experience", "code", "work", "time", "meal", "food", "dinner", "lunch", "breakfast",
+                "head", "hand", "mind", "life", "first", "last", "other", "best", "worst", "python",
+                "capital", "france", "joke", "status", "outcome", "session", "springs", "spring",
+                "most likely", "likely", "most", "cause", "causes", "reason", "reasons", "happen",
+                "machine", "device", "equipment", "appliance", "unit", "system", "thing", "things",
+                "repair records", "past repair", "records", "history", "precedents", "help", "detail",
+            }
+            if candidate not in non_equipment_words and not any(w in candidate.split() for w in ["what", "how", "why", "when", "where", "who", "can", "explain", "that", "this", "most", "likely", "happen"]):
+                formatted_name = candidate.title()
+                cat = "electronic" if any(k in candidate for k in ["battery", "charger", "power", "phone", "usb", "drone", "audio", "device", "led"]) else "household"
+                return {
+                    "equipment_type": formatted_name,
+                    "category": cat,
+                    "matched_keyword": candidate,
+                }
+
+    return None
 
 # Known hazard keywords
 HAZARD_TRIGGERS = [
@@ -185,6 +262,359 @@ class ChatService:
         with get_db() as conn:
             cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
             return cursor.rowcount > 0
+
+    def record_problem_episode(
+        self,
+        conversation_id: str,
+        equipment_name: str,
+        category: str,
+        symptoms: str,
+        original_description: str,
+        user_scope: str = "default_user",
+    ) -> str:
+        """
+        Record or update an active, unresolved problem episode in persistent SQLite.
+        Enables cross-conversation learning and outcome linking when repairs are reported in later sessions.
+        """
+        ep_id = generate_id("EPISODE")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with get_db() as conn:
+            # Check if this exact conversation and equipment already has an unresolved episode
+            existing = conn.execute(
+                """
+                SELECT id FROM problem_episodes
+                WHERE conversation_id = ? AND LOWER(equipment_name) = ? AND status = 'unresolved'
+                LIMIT 1
+                """,
+                (conversation_id, equipment_name.lower().strip()),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE problem_episodes
+                    SET symptoms = ?, original_description = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (symptoms[:250], original_description[:500], now_iso, existing["id"]),
+                )
+                return existing["id"]
+
+            conn.execute(
+                """
+                INSERT INTO problem_episodes (
+                    id, conversation_id, user_scope, equipment_name, equipment_category,
+                    symptoms, original_description, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'unresolved', ?, ?)
+                """,
+                (
+                    ep_id,
+                    conversation_id,
+                    user_scope,
+                    equipment_name,
+                    category,
+                    symptoms[:250],
+                    original_description[:500],
+                    now_iso,
+                    now_iso,
+                ),
+            )
+        return ep_id
+
+    def find_matching_problem_episode(
+        self,
+        equipment_name: Optional[str],
+        text: str,
+        user_scope: str = "default_user",
+        conversation_id: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        """
+        Search unresolved problem episodes across all conversations for the user scope.
+        Prioritizes the active conversation if conversation_id has an unresolved episode.
+        Matches by equipment name, symptom keywords, and chronological recency.
+        """
+        if conversation_id:
+            with get_db() as conn:
+                conv_ep = conn.execute(
+                    """
+                    SELECT id, conversation_id, user_scope, equipment_name, equipment_category,
+                           symptoms, original_description, status, created_at, updated_at
+                    FROM problem_episodes
+                    WHERE conversation_id = ? AND status = 'unresolved'
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (conversation_id,),
+                ).fetchone()
+                if conv_ep:
+                    return dict(conv_ep)
+
+        with get_db() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, conversation_id, user_scope, equipment_name, equipment_category,
+                       symptoms, original_description, status, created_at, updated_at
+                FROM problem_episodes
+                WHERE user_scope = ? AND status = 'unresolved'
+                ORDER BY updated_at DESC
+                """,
+                (user_scope,),
+            ).fetchall()
+
+        if not rows:
+            return None
+
+        lower_text = text.lower()
+        lower_eq = equipment_name.lower().strip() if equipment_name else ""
+
+        # Strategy 1: Match on explicit equipment name passed in
+        if lower_eq:
+            for r in rows:
+                r_eq = r["equipment_name"].lower().strip()
+                if lower_eq == r_eq or lower_eq in r_eq or r_eq in lower_eq:
+                    return dict(r)
+
+        # Strategy 2: Check if any episode's equipment name appears in the message text
+        for r in rows:
+            r_eq = r["equipment_name"].lower().strip()
+            if re.search(r'\b' + re.escape(r_eq) + r'\b', lower_text):
+                return dict(r)
+
+        # Strategy 3: Token overlap between user text and episode equipment / symptoms / description
+        best_match = None
+        best_score = 0
+        words = set(re.findall(r'\b[a-zA-Z]{3,}\b', lower_text))
+
+        for r in rows:
+            r_eq_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', r["equipment_name"].lower()))
+            r_sym_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', r["symptoms"].lower()))
+            r_desc_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', r["original_description"].lower()))
+
+            # Weight equipment matches very heavily to avoid cross-equipment confusion
+            eq_overlap = len(words.intersection(r_eq_words))
+            sym_overlap = len(words.intersection(r_sym_words.union(r_desc_words)))
+            score = (eq_overlap * 15) + sym_overlap
+
+            if score > best_score:
+                best_score = score
+                best_match = r
+
+        if best_match and best_score >= 1:
+            return dict(best_match)
+
+        # Strategy 4: If exactly 1 unresolved episode exists for this user scope, match it
+        if len(rows) == 1:
+            return dict(rows[0])
+
+        return None
+
+    def resolve_problem_episode(
+        self,
+        episode_id: str,
+        action_taken: str,
+        user_scope: str = "default_user",
+    ) -> bool:
+        """Mark a problem episode as resolved in SQLite with its verified repair action."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with get_db() as conn:
+            res = conn.execute(
+                """
+                UPDATE problem_episodes
+                SET status = 'resolved',
+                    resolution_action = ?,
+                    resolved_at = ?,
+                    updated_at = ?
+                WHERE id = ? AND user_scope = ?
+                """,
+                (action_taken, now_iso, now_iso, episode_id, user_scope),
+            )
+            return res.rowcount > 0
+
+    def classify_intent_and_entities(
+        self,
+        raw_message: str,
+        conversation_history: list[dict],
+        user_scope: str = "default_user",
+    ) -> dict[str, Any]:
+        """
+        Calibrated semantic intent classification and entity extraction.
+        Executes BEFORE memory retrieval and guarantees strict context isolation.
+        """
+        lower = raw_message.lower().strip()
+
+        # 1. Casual social conversation, chitchat & greetings
+        # Strict context isolation: Zero memory calls, zero diagnostic boilerplate
+        casual_greetings = [
+            "hello", "hi", "hey", "howdy", "greetings", "good morning",
+            "good afternoon", "good evening", "good night", "what's up", "whats up", "sup", "yo"
+        ]
+        is_greeting = any(
+            lower == g or lower.startswith(g + " ") or lower.startswith(g + "!") or lower.startswith(g + ",") or lower.startswith(g + ".")
+            for g in casual_greetings
+        )
+
+        casual_social_patterns = [
+            "how are you", "how are you doing", "how r u", "how are u", "how is it going",
+            "how's it going", "hows it going", "how do you do", "hope you are well",
+            "how's your day", "how is your day",
+            "what did you eat", "did you eat", "what's your favorite food", "what did you have for",
+            "do you have a girlfriend", "do you have a boyfriend", "are you single", "do you love me",
+            "marry me", "who is your crush",
+            "what is your name", "what's your name", "who are you", "tell me about yourself",
+            "who made you", "who created you", "who built you",
+            "tell me a joke", "make me laugh", "say something funny",
+            "how is the weather", "what's the weather", "what is the weather"
+        ]
+        is_social = any(phrase in lower for phrase in casual_social_patterns)
+
+        # 2. Unrelated general knowledge, programming, geography, trivia
+        unrelated_patterns = [
+            "what is python", "what is javascript", "what is java", "what is c++", "what is rust",
+            "how to write python", "how to code", "write a python", "write a function",
+            "what is the capital of france", "capital of france", "capital of germany", "capital of india",
+            "capital of italy", "capital of spain", "who was napoleon", "who was albert einstein",
+            "who is the president", "who won the world cup",
+            "how to bake a cake", "how to make pasta", "recipe for", "how to cook",
+            "what is 2 + 2", "what is 2+2", "calculate ", "solve this equation",
+            "what is photosynthesis", "why is the sky blue", "speed of light"
+        ]
+        is_unrelated = any(p in lower for p in unrelated_patterns) or (
+            (lower.startswith("what is ") or lower.startswith("who is ") or lower.startswith("where is "))
+            and not any(eq in lower for eq in ["pump", "motor", "compressor", "oven", "mixer", "laptop", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor"])
+            and any(w in lower for w in ["python", "france", "paris", "europe", "math", "code", "programming", "capital", "president", "cake", "pasta", "recipe", "history"])
+        )
+
+        # 3. Gratitude / Acknowledgment
+        acknowledgment_patterns = [
+            "thank you", "thanks", "thx", "thank u", "appreciate it", "great thanks",
+            "ok thanks", "got it", "perfect", "awesome", "understood", "okay thanks", "ok thank you"
+        ]
+        is_acknowledgment = any(
+            lower == a or lower.startswith(a + " ") or lower.startswith(a + "!") or lower.startswith(a + ".")
+            for a in acknowledgment_patterns
+        )
+
+        # 4. Repair Outcome Reporting (English + Hindi / Hinglish + Colloquial)
+        outcome_action_cues = [
+            "replaced", "technician fixed", "technician replaced", "technician cleaned", "technician serviced",
+            "technician adjusted", "technician aligned", "technician inspected", "technician repaired",
+            "cleaned cooling fins", "cleaned the cooling fins", "cleaned the fins", "cleaned fins",
+            "cooling fins cleaned", "now working", "now it works", "now the pump works", "works normally",
+            "working normally", "running normally", "runs normally", "did not work", "failed to fix",
+            "fixed it", "repaired by", "outcome was", "problem resolved", "solved the issue",
+            "didn't work", "still not working", "service technician", "we replaced", "we changed",
+            "we cleaned", "we fixed", "we swapped", "swapped the", "problem continued", "overheating continued", "vibration continued",
+            "still overheats", "it still overheats", "repair didn't work", "the repair didn't work",
+            "problem persisted", "issue persisted", "vibration persisted", "overheating persisted",
+            "still happening", "still overheating", "still vibrating", "still broken", "remained faulty",
+            "opening perfectly", "now it opens", "now opens", "opens normally", "now opening normally",
+            "replaced the springs", "replaced springs", "changed the springs", "changed springs"
+        ]
+        hinglish_outcome_cues = [
+            "change kar diya", "badal diya", "badal di", "theek kar diya", "theek ho gaya",
+            "thik kar diya", "thik ho gaya", "sahi kar diya", "sahi ho gaya", "sahi chal raha",
+            "sahi chal rahi", "ab sahi chal raha", "chalne laga", "mast chal raha", "kaam kar raha",
+            "ab theek hai", "nahi chala", "kaam nahi kiya", "thik nahi hua", "waisa hi hai",
+            "problem solve nahi", "kharab hi hai", "spring change"
+        ]
+        is_outcome_report = (
+            any(phrase in lower for phrase in outcome_action_cues)
+            or any(phrase in lower for phrase in hinglish_outcome_cues)
+            or (
+                any(w in lower for w in ["technician", "mechanic", "engineer", "electrician", "maintenance", "crew", "team", "operator", "i", "we"])
+                and any(w in lower for w in ["cleaned", "replaced", "aligned", "fixed", "adjusted", "serviced", "swapped", "repaired", "tightened", "changed"])
+            )
+            or (
+                any(w in lower for w in ["now works", "works normally", "works again", "opening perfectly", "problem continued", "issue persisted", "vibration persisted", "still overheats", "still vibrating", "didn't solve", "didn't work"])
+            )
+        )
+
+        # 5. Historical Memory Inquiries
+        hist_phrases = [
+            "happened before", "happened previously", "seen this before", "seen this issue previously",
+            "seen this problem", "have we seen this", "has this happened", "have we encountered",
+            "worked last time", "worked before", "worked previously", "repairs failed", "repair failed",
+            "repairs succeeded", "repair succeeded", "repairs worked", "what worked", "which repairs",
+            "what happened before", "previous incident", "prior incident", "past incident",
+            "past repair", "prior repair", "previous repair", "repair record", "repair history",
+            "history of this", "what was done before", "what was done last time", "did anyone fix this before",
+            "how was this fixed before", "past experience", "historical record", "historical incident",
+            "historical precedent", "historical memory", "in our history", "plant history", "past failure", "prior failure",
+            "similar problem happened", "similar issue happened", "similar incident", "like this happened before",
+            "like this occurred", "occurred before", "occurred previously", "seen before",
+            "occurred in past", "occurred in previous", "happened on any other", "past repair records"
+        ]
+        is_historical_memory_query = (
+            any(phrase in lower for phrase in hist_phrases)
+            or (
+                any(w in lower for w in ["happen", "occur", "seen", "worked", "failed", "fixed", "done", "record", "history", "precedent", "experience"])
+                and any(w in lower for w in ["before", "previously", "last time", "prior", "past", "earlier", "history"])
+            )
+        )
+
+        # 6. Follow-ups
+        is_simplify = any(phrase in lower for phrase in [
+            "simpler words", "simpler terms", "explain that more simply", "explain more simply",
+            "can you explain in simpler", "explain in simpler", "plain english", "too technical",
+            "dumb it down", "make it simpler", "eli5", "in simpler words", "simpler"
+        ]) and not is_historical_memory_query
+
+        is_technician_question = any(phrase in lower for phrase in [
+            "ask my technician", "ask the technician", "questions should i ask",
+            "what should i ask my technician", "what specific questions", "what to ask the technician",
+            "what should i tell the technician", "tell my technician", "questions for the technician"
+        ]) and not is_historical_memory_query
+
+        is_why_or_how = any(phrase in lower for phrase in [
+            "why might that happen", "why does it", "why do they", "why would that happen",
+            "how do you know", "why does that cause", "what causes that", "why is that",
+            "can you elaborate", "could it be"
+        ]) and not is_historical_memory_query
+
+        # 7. Concept queries
+        is_concept_query = any(lower.startswith(p) for p in [
+            "what is a ", "what is an ", "how does a ", "how does an ", "how does ", "define "
+        ]) and any(w in lower for w in ["pump", "motor", "compressor", "oven", "mixer", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor"])
+
+        # Detect equipment directly in message
+        detected_equipment = detect_equipment_entity(raw_message)
+
+        # Check for ambiguity
+        has_ambiguity_cue = any(phrase in lower for phrase in ["which one", "both of them", "which machine", "either of them"])
+
+        # Final intent determination
+        if is_social:
+            intent = "CASUAL_CONVERSATION"
+        elif is_greeting:
+            intent = "CASUAL_GREETING"
+        elif is_unrelated:
+            intent = "UNRELATED_QUERY"
+        elif is_acknowledgment:
+            intent = "ACKNOWLEDGMENT"
+        elif has_ambiguity_cue and len(conversation_history) > 1:
+            intent = "CLARIFICATION_NEEDED"
+        elif is_outcome_report:
+            intent = "REPORT_OUTCOME"
+        elif is_historical_memory_query:
+            intent = "HISTORICAL_MEMORY_QUERY"
+        elif is_simplify:
+            intent = "FOLLOWUP_SIMPLIFY"
+        elif is_technician_question:
+            intent = "FOLLOWUP_TECHNICIAN_QUESTIONS"
+        elif is_why_or_how:
+            intent = "FOLLOWUP_WHY_OR_HOW"
+        elif is_concept_query:
+            intent = "CONCEPT_EXPLANATION"
+        elif detected_equipment or any(kw in lower for kw in ["problem", "broken", "issue", "fault", "not working", "won't", "stops", "stopped", "stalled", "vibrat", "overheat", "noise", "loud", "leak", "smoke", "creak", "creaking", "stuck"]):
+            intent = "TROUBLESHOOTING_QUERY"
+        else:
+            intent = "GENERAL_INQUIRY"
+
+        return {
+            "intent": intent,
+            "detected_equipment": detected_equipment,
+            "is_outcome_report": is_outcome_report,
+            "is_historical_memory_query": is_historical_memory_query,
+        }
 
     def search_local_memories(
         self,
@@ -509,20 +939,13 @@ class ChatService:
                     "created_at": r["created_at"],
                 })
 
-        # 3. Context Resolution: Detect Equipment & Equipment Switching
+        # 3. Semantic Intent Classification & Entity Extraction (Executed FIRST)
         lower_msg = raw_message.lower().strip()
-        matched_equipment_current: Optional[dict[str, Any]] = None
-
-        # Sorted by key length descending so specific terms match first
-        sorted_keywords = sorted(EQUIPMENT_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
-        for kw, (eq_name, category) in sorted_keywords:
-            if re.search(r'\b' + re.escape(kw) + r'\b', lower_msg) or kw in lower_msg:
-                matched_equipment_current = {
-                    "equipment_type": eq_name,
-                    "category": category,
-                    "matched_keyword": kw,
-                }
-                break
+        classification = self.classify_intent_and_entities(raw_message, conversation_history)
+        intent = classification["intent"]
+        matched_equipment_current = classification["detected_equipment"]
+        is_historical_memory_query = classification["is_historical_memory_query"]
+        is_outcome_report = classification["is_outcome_report"]
 
         # Retrieve previous equipment & precedents from conversation history
         prev_equipment: Optional[dict[str, Any]] = None
@@ -535,174 +958,67 @@ class ChatService:
             if eq and isinstance(eq, dict) and eq.get("equipment_type"):
                 if not prev_equipment:
                     prev_equipment = eq
-                    raw_precs = m_meta.get("retrieved_precedents", [])
-                    prev_precedents = [PrecedentRecord(**p) if isinstance(p, dict) else p for p in raw_precs]
                 if eq["equipment_type"] not in recent_equipments_discussed:
                     recent_equipments_discussed.append(eq["equipment_type"])
+            raw_precs = m_meta.get("retrieved_precedents", [])
+            if raw_precs and not prev_precedents:
+                prev_precedents = [PrecedentRecord(**p) if isinstance(p, dict) else p for p in raw_precs]
 
-        # Determine active equipment & detect equipment switching or ambiguity
+        # 4. Context Resolution with Strict Isolation for Casual / Unrelated Queries
         equipment_switched = False
         is_followup = False
-        ambiguity_detected = False
+        detected_hazard: Optional[str] = None
+        active_equipment: Optional[dict[str, Any]] = None
 
-        if matched_equipment_current:
+        is_followup_turn = intent.startswith("FOLLOWUP_") or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
+
+        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT"):
+            # STRICT ISOLATION: Zero context leakage from earlier machinery questions
+            active_equipment = None
+            detected_equipment = None
+            detected_hazard = None
+            is_followup = False
+        elif intent == "CLARIFICATION_NEEDED":
+            active_equipment = prev_equipment
+            detected_equipment = prev_equipment
+        elif prev_equipment and is_followup_turn:
+            # Explicit follow-up questions always inherit previous equipment context
+            active_equipment = prev_equipment
+            detected_equipment = active_equipment
+            is_followup = True
+        elif matched_equipment_current:
             if prev_equipment and prev_equipment["equipment_type"].lower() != matched_equipment_current["equipment_type"].lower():
                 equipment_switched = True
                 active_equipment = matched_equipment_current
             else:
                 active_equipment = matched_equipment_current
-        elif prev_equipment:
-            has_ambiguity_cue = any(phrase in lower_msg for phrase in ["which one", "both of them", "which machine", "either of them"])
-            if has_ambiguity_cue and len(recent_equipments_discussed) > 1:
-                ambiguity_detected = True
-                active_equipment = prev_equipment
-            else:
-                active_equipment = prev_equipment
-                is_followup = True
+            detected_equipment = active_equipment
+        elif prev_equipment and intent not in ("REPORT_OUTCOME",):
+            active_equipment = prev_equipment
+            detected_equipment = active_equipment
+            is_followup = True
         else:
             active_equipment = None
+            detected_equipment = None
 
-        detected_equipment = active_equipment
+        # 5. Safety Hazard Determination (suppressed for casual, unrelated, or history queries)
+        if active_equipment and intent not in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT", "HISTORICAL_MEMORY_QUERY"):
+            category = active_equipment.get("category", "industrial")
+            detected_hazard = self._get_device_appropriate_hazard(category, raw_message)
 
-        # 4. Check hazard keywords with device-appropriate safety
-        category = active_equipment.get("category", "industrial") if active_equipment else "industrial"
-        detected_hazard = self._get_device_appropriate_hazard(category, raw_message)
-
-        # 5. Detect Intent Adaptively
-        # Greetings
-        is_greeting = any(lower_msg == g or lower_msg.startswith(g + " ") or lower_msg.startswith(g + "!") or lower_msg.startswith(g + ",") for g in [
-            "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "howdy", "greetings"
-        ])
-
-        # Gratitude / Acknowledgment
-        is_gratitude = any(lower_msg == g or lower_msg.startswith(g + " ") or lower_msg.startswith(g + "!") or lower_msg.startswith(g + ".") for g in [
-            "thank you", "thanks", "thx", "thank u", "appreciate it", "great thanks", "ok thanks", "got it", "perfect", "awesome"
-        ])
-
-        # Outcome reporting
-        outcome_action_cues = [
-            "replaced", "technician fixed", "technician replaced", "technician cleaned", "technician serviced",
-            "technician adjusted", "technician aligned", "technician inspected", "technician repaired",
-            "cleaned cooling fins", "cleaned the cooling fins", "cleaned the fins", "cleaned fins",
-            "cooling fins cleaned", "now working", "now it works", "now the pump works", "works normally",
-            "working normally", "running normally", "runs normally", "did not work", "failed to fix",
-            "fixed it", "repaired by", "outcome was", "problem resolved", "solved the issue",
-            "didn't work", "still not working", "service technician", "we replaced", "we changed",
-            "we cleaned", "we fixed", "we swapped", "swapped the", "problem continued", "overheating continued", "vibration continued",
-            "still overheats", "it still overheats", "repair didn't work", "the repair didn't work",
-            "problem persisted", "issue persisted", "vibration persisted", "overheating persisted",
-            "still happening", "still overheating", "still vibrating", "still broken", "remained faulty"
-        ]
-        is_outcome_report = (
-            any(phrase in lower_msg for phrase in outcome_action_cues)
-            or (
-                any(w in lower_msg for w in ["technician", "mechanic", "engineer", "electrician", "maintenance", "crew", "team", "contractor"])
-                and any(w in lower_msg for w in ["cleaned", "replaced", "aligned", "fixed", "adjusted", "serviced", "swapped", "repaired", "tightened", "changed"])
-            )
-            or (
-                any(w in lower_msg for w in ["now works", "works normally", "works again", "problem continued", "issue persisted", "vibration persisted", "still overheats", "still vibrating", "didn't solve", "didn't work"])
-            )
-        )
-
-        # Dedicated HISTORICAL_MEMORY_QUERY recognition
-        # Handles variations: "Has this happened before?", "Have we seen this issue previously?",
-        # "What worked last time?", "Which repairs failed?", "Has a similar problem happened before?", etc.
-        hist_phrases = [
-            "happened before", "happened previously", "seen this before", "seen this issue previously",
-            "seen this problem", "have we seen this", "has this happened", "have we encountered",
-            "worked last time", "worked before", "worked previously", "repairs failed", "repair failed",
-            "repairs succeeded", "repair succeeded", "repairs worked", "what worked", "which repairs",
-            "what happened before", "previous incident", "prior incident", "past incident",
-            "past repair", "prior repair", "previous repair", "repair record", "repair history",
-            "history of this", "what was done before", "what was done last time", "did anyone fix this before",
-            "how was this fixed before", "past experience", "historical record", "historical incident",
-            "historical precedent", "historical memory", "in our history", "plant history", "past failure", "prior failure",
-            "similar problem happened", "similar issue happened", "similar incident", "like this happened before",
-            "like this occurred", "occurred before", "occurred previously", "seen before",
-            "occurred in past", "occurred in previous", "happened on any other", "past repair records"
-        ]
-        is_historical_memory_query = (
-            any(phrase in lower_msg for phrase in hist_phrases)
-            or (
-                any(w in lower_msg for w in ["happen", "occur", "seen", "worked", "failed", "fixed", "done", "record", "history", "precedent", "experience"])
-                and any(w in lower_msg for w in ["before", "previously", "last time", "prior", "past", "earlier", "history"])
-            )
-        )
-        is_explicit_memory_request = is_historical_memory_query
-
-        # Simplify follow-up inquiry
-        is_simplify = any(phrase in lower_msg for phrase in [
-            "simpler words", "simpler terms", "explain that more simply", "explain more simply",
-            "can you explain in simpler", "explain in simpler", "plain english", "too technical",
-            "dumb it down", "make it simpler", "eli5", "in simpler words", "simpler"
-        ]) and not is_historical_memory_query
-
-        # Technician question inquiry
-        is_technician_question = any(phrase in lower_msg for phrase in [
-            "ask my technician", "ask the technician", "questions should i ask",
-            "what should i ask my technician", "what specific questions", "what to ask the technician",
-            "what should i tell the technician", "tell my technician", "questions for the technician"
-        ]) and not is_historical_memory_query
-
-        # Why or How causal inquiry
-        is_why_or_how = any(phrase in lower_msg for phrase in [
-            "why might that happen", "why does it", "why do they", "why would that happen",
-            "how do you know", "why does that cause", "what causes that", "why is that",
-            "can you elaborate", "could it be"
-        ]) and not is_historical_memory_query
-
-        # Educational / Conceptual inquiry
-        is_concept_query = any(lower_msg.startswith(p) for p in [
-            "what is a ", "what is an ", "what is ", "what are ",
-            "how does a ", "how does an ", "how does ", "define "
-        ]) and not is_outcome_report and not is_simplify and not is_technician_question and not is_followup and not is_historical_memory_query
-
-        # Equipment Troubleshooting Query
-        is_troubleshooting = (any(phrase in lower_msg for phrase in [
-            "overheating", "overheat", "vibrating", "vibration", "noise", "loud", "smoke", "leaking", "leak",
-            "shutting down", "switching off", "turns off", "shuts off", "tripping", "broken",
-            "stopped", "stalled", "not starting", "error", "problem", "fault", "failure", "flutter",
-            "won't turn on", "not turning on", "won't start"
-        ]) or (matched_equipment_current is not None and not is_greeting and not is_concept_query and not is_outcome_report)) and not is_historical_memory_query
-
-        if ambiguity_detected:
-            intent = "CLARIFICATION_NEEDED"
-        elif is_greeting:
-            intent = "CASUAL_GREETING"
-        elif is_gratitude:
-            intent = "ACKNOWLEDGMENT"
-        elif is_outcome_report:
-            intent = "REPORT_OUTCOME"
-        elif is_historical_memory_query:
-            intent = "HISTORICAL_MEMORY_QUERY"
-        elif is_simplify:
-            intent = "FOLLOWUP_SIMPLIFY"
-        elif is_technician_question:
-            intent = "FOLLOWUP_TECHNICIAN_QUESTIONS"
-        elif is_why_or_how:
-            intent = "FOLLOWUP_WHY_OR_HOW"
-        elif is_concept_query:
-            intent = "CONCEPT_EXPLANATION"
-        elif is_troubleshooting:
-            intent = "TROUBLESHOOTING_QUERY"
-        elif is_followup:
-            intent = "FOLLOWUP_GENERAL"
-        else:
-            intent = "GENERAL_INQUIRY"
-
-        # Suppress hazard warning on historical memory inquiries to prevent unsolicited Safety Alert banners
-        if is_historical_memory_query:
-            detected_hazard = None
-
-        # 6. Retrieve Precedents & Determine Memory Card Visibility
+        # 6. Precedent Retrieval with Zero Memory Call Guarantee for Casual & Unrelated Queries
         mock_mode = req.mock_memory if req.mock_memory is not None else settings.HINDSIGHT_MOCK_MODE
-
         active_precedents: list[PrecedentRecord] = []
-        if (is_historical_memory_query or intent == "HISTORICAL_MEMORY_QUERY") and is_followup and prev_precedents:
-            # In an active conversation, asking about history/records refers to the active incident's precedents
+
+        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "UNRELATED_QUERY", "ACKNOWLEDGMENT", "CLARIFICATION_NEEDED"):
+            # ZERO MEMORY CALLS: Do not query local database or Hindsight Cloud
+            active_precedents = []
+            retrieved_precedents_for_response = []
+        elif (is_historical_memory_query or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")) and prev_precedents:
             active_precedents = prev_precedents
-        elif is_historical_memory_query or intent in ("TROUBLESHOOTING_QUERY", "HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
-            eq_type = active_equipment["equipment_type"] if active_equipment else None
+            retrieved_precedents_for_response = active_precedents
+        elif is_historical_memory_query or intent in ("TROUBLESHOOTING_QUERY", "HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY"):
+            eq_type = active_equipment["equipment_type"] if active_equipment else (matched_equipment_current["equipment_type"] if matched_equipment_current else None)
             query_for_retrieval = raw_message
             if is_followup and not any(w in raw_message.lower() for w in ["vibrat", "temp", "overheat", "noise", "leak"]):
                 for m in conversation_history:
@@ -714,20 +1030,15 @@ class ChatService:
                 mock_mode=mock_mode,
                 equipment_type=eq_type,
             )
+            retrieved_precedents_for_response = active_precedents
         elif is_followup:
             active_precedents = prev_precedents
+            retrieved_precedents_for_response = []
+        else:
+            active_precedents = []
+            retrieved_precedents_for_response = []
 
-        # Context-aware memory card display:
-        # Precedent cards are displayed on initial troubleshooting questions or when the user specifically asks a historical-memory question.
-        # Cards are suppressed on simple follow-ups (simplifications, technician questions, causal inquiries, greetings, acknowledgments).
-        show_memory_cards = (
-            (intent == "TROUBLESHOOTING_QUERY" and not is_followup)
-            or is_historical_memory_query
-            or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
-        )
-        retrieved_precedents_for_response = active_precedents if show_memory_cards else []
-
-        # 7. Extract Outcome Facts with Grounding
+        # 7. Outcome Fact Extraction with Cross-Conversation Episode Linking
         outcome_to_record: Optional[dict[str, Any]] = None
         if intent == "REPORT_OUTCOME":
             failure_cues = [
@@ -738,43 +1049,75 @@ class ChatService:
                 "still loud", "still making noise", "no change", "didn't solve",
                 "did not solve", "repair didn't work", "the repair didn't work",
                 "still not fixed", "didn't help", "did not help", "without success",
-                "didn't fix", "did not fix", "remained faulty"
+                "didn't fix", "did not fix", "remained faulty", "nahi chala", "thik nahi hua", "kharab hi hai"
             ]
             is_success = not any(neg in lower_msg for neg in failure_cues)
             is_tech = any(w in lower_msg for w in ["technician", "electrician", "mechanic", "engineer", "service center", "service person"])
             is_audit = any(w in lower_msg for w in ["certified audit", "iso audit", "lead engineer audit", "third party inspection", "independently verified"])
-            
+
             verif_status = "INDEPENDENTLY_VERIFIED" if is_audit else "TECHNICIAN_CONFIRMED" if is_tech else "USER_REPORTED"
             verif_source = "Certified Independent Audit" if is_audit else "Technician Field Report" if is_tech else "Operator Field Report"
-            
-            eq_name = active_equipment["equipment_type"] if active_equipment else "Industrial Equipment"
-            
-            # Extract actual symptoms from earlier messages in session
-            original_symptoms = "Reported equipment issue from session"
-            for m in conversation_history:
-                if m["role"] == "user":
-                    user_text = m["content"]
-                    if any(w in user_text.lower() for w in ["stopped", "vibrat", "overheat", "noise", "shuts off", "fan loud", "error", "problem", "fault", "won't"]):
-                        original_symptoms = user_text[:120]
-                        break
 
-            # Extract specific action phrase from message if pattern matches
+            # Cross-Conversation Episode Search: Match prior problem episode in SQLite
+            eq_name_to_search = (
+                matched_equipment_current["equipment_type"]
+                if matched_equipment_current
+                else (prev_equipment["equipment_type"] if prev_equipment else None)
+            )
+            matched_episode = self.find_matching_problem_episode(
+                equipment_name=eq_name_to_search,
+                text=raw_message,
+                conversation_id=conv_id,
+            )
+
+            linked_episode_id: Optional[str] = None
+            if matched_episode:
+                eq_name = matched_episode["equipment_name"]
+                original_symptoms = matched_episode["symptoms"]
+                linked_episode_id = matched_episode["id"]
+                active_equipment = {
+                    "equipment_type": eq_name,
+                    "category": matched_episode.get("equipment_category", "household"),
+                    "matched_keyword": eq_name.lower(),
+                }
+                detected_equipment = active_equipment
+            else:
+                eq_name = (
+                    matched_equipment_current["equipment_type"]
+                    if matched_equipment_current
+                    else (prev_equipment["equipment_type"] if prev_equipment else (active_equipment["equipment_type"] if active_equipment else "General Equipment"))
+                )
+                original_symptoms = "Reported equipment issue from session"
+                for m in conversation_history:
+                    if m["role"] == "user":
+                        user_text = m["content"]
+                        if any(w in user_text.lower() for w in ["stopped", "vibrat", "overheat", "noise", "shuts off", "fan loud", "error", "problem", "fault", "won't", "creak", "stuck"]):
+                            original_symptoms = user_text[:120]
+                            break
+
+            # Extract specific action phrase (English + Hinglish)
             action_phrase = raw_message
-            m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(cleaned[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            if not m_act_clean:
-                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(replaced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            if not m_act_clean:
-                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(swapped[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            if not m_act_clean:
-                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(repaired[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            if not m_act_clean:
-                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(serviced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            if not m_act_clean:
-                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator)?\s*(cleared[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
-            
-            if m_act_clean:
-                action_phrase = m_act_clean.group(1).strip()
-                action_phrase = action_phrase[0].upper() + action_phrase[1:]
+            if any(k in lower_msg for k in ["spring change", "springs change", "replaced the springs", "replaced springs"]):
+                action_phrase = f"Replaced the springs in {eq_name.lower()}"
+            elif any(k in lower_msg for k in ["seal change", "replaced the seal", "replaced mechanical seal"]):
+                action_phrase = f"Replaced mechanical seal on {eq_name.lower()}"
+            elif any(k in lower_msg for k in ["bearing change", "replaced bearings", "changed bearings"]):
+                action_phrase = f"Replaced drive bearings on {eq_name.lower()}"
+            elif any(k in lower_msg for k in ["cooling fins", "cleaned fins", "cleaned cooling"]):
+                action_phrase = f"Cleaned blocked cooling fins on {eq_name.lower()}"
+            else:
+                m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator|i)?\s*(cleaned[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+                if not m_act_clean:
+                    m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator|i)?\s*(replaced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+                if not m_act_clean:
+                    m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator|i)?\s*(swapped[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+                if not m_act_clean:
+                    m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator|i)?\s*(repaired[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+                if not m_act_clean:
+                    m_act_clean = re.search(r"(?:technician|mechanic|crew|engineer|team|we|operator|i)?\s*(serviced[^\,\.]+?)(?:\s+and\s+|\.|\,|$)", raw_message, re.IGNORECASE)
+                if m_act_clean:
+                    action_phrase = m_act_clean.group(1).strip()
+                    action_phrase = action_phrase[0].upper() + action_phrase[1:]
 
             # Stable idempotency key for this detected outcome
             clean_token = re.sub(r"\W+", "", raw_message[:20]).lower()
@@ -788,10 +1131,21 @@ class ChatService:
                 "verification_status": verif_status,
                 "verification_source": verif_source,
                 "idempotency_key": idempotency_key,
+                "episode_id": linked_episode_id,
                 "ready_to_save": True,
             }
 
-        # 8. Build Multi-Turn Context and Groq Prompt
+        # 8. Record Active Problem Episode on Troubleshooting Queries for Cross-Conversation Tracking
+        if intent == "TROUBLESHOOTING_QUERY" and active_equipment:
+            self.record_problem_episode(
+                conversation_id=conv_id,
+                equipment_name=active_equipment["equipment_type"],
+                category=active_equipment.get("category", "general"),
+                symptoms=raw_message,
+                original_description=raw_message,
+            )
+
+        # 9. Build Multi-Turn Context and Groq Prompt
         active_eq_name = active_equipment["equipment_type"] if active_equipment else "the equipment"
         precedent_text = ""
         if active_precedents:
@@ -815,12 +1169,25 @@ class ChatService:
             clarification_options = " or ".join(recent_equipments_discussed[:2]) if len(recent_equipments_discussed) >= 2 else "the equipment"
             direct_reply = f"Before I advise you, could you please clarify whether you're asking about the {clarification_options}?"
 
-        elif intent == "CASUAL_GREETING":
+        elif intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING"):
             system_instruction = (
                 "You are RecallOps — an AI troubleshooting assistant that learns from verified real-world experiences.\n"
-                "Respond warmly, concisely, and naturally. Greet the user and invite them to describe any equipment problem "
-                "(motors, pumps, compressors, appliances, or devices) they need help understanding or diagnosing. "
-                "Do NOT use troubleshooting section headers. Keep response under 40 words."
+                "The user is engaging in casual conversation or friendly greeting (asking how you are, what you ate, or a social question).\n"
+                "Respond warmly, naturally, and concisely (under 35 words). "
+                "Do NOT mention any previous machinery or equipment unless the user explicitly mentioned it in this turn. "
+                "Do NOT use troubleshooting section headers. Invite them to let you know whenever they have an equipment or device issue to diagnose."
+            )
+            groq_messages = [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": raw_message},
+            ]
+
+        elif intent == "UNRELATED_QUERY":
+            system_instruction = (
+                "You are RecallOps — an AI troubleshooting assistant specialized in diagnosing machinery, household appliances, and electronics using verified repair history.\n"
+                "The user is asking an unrelated general knowledge, coding, or trivia question.\n"
+                "Politely and concisely explain that RecallOps specializes in equipment diagnostics and troubleshooting rather than general knowledge. "
+                "Keep your response under 45 words. Do NOT include troubleshooting section headers or fabricate equipment symptoms."
             )
             groq_messages = [
                 {"role": "system", "content": system_instruction},
@@ -993,11 +1360,42 @@ class ChatService:
             except Exception as e:
                 logger.error("Groq chat inference error: %s", e)
                 # Calibrated structured fallback adhering to diagnostic response format
-                if intent == "CASUAL_GREETING":
-                    reply_text = (
-                        "Hello! I'm RecallOps, your equipment troubleshooting assistant. "
-                        "Describe an equipment issue—such as a pump, motor, or appliance—and I can help you understand plausible causes and verified repair history."
-                    )
+                if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING"):
+                    lower_r = raw_message.lower()
+                    if any(q in lower_r for q in ["how are you", "how are u", "how r u", "how's it going", "how is it going"]):
+                        reply_text = (
+                            "I'm doing well, thank you! I'm RecallOps, ready to help you understand plausible causes and verified repair history for any equipment or device. What can I help you troubleshoot today?"
+                        )
+                    elif any(q in lower_r for q in ["what did you eat", "did you eat", "favorite food"]):
+                        reply_text = (
+                            "I run on clean electric power and code, so no food for me! But I'm fully energized and ready to help you diagnose any equipment or device problem whenever you need."
+                        )
+                    elif any(q in lower_r for q in ["girlfriend", "boyfriend", "single", "marry"]):
+                        reply_text = (
+                            "I don't have a personal life—I'm an AI dedicated to equipment diagnostics and learning from verified repair history! Let me know if you ever have a machine or device issue to troubleshoot."
+                        )
+                    elif any(q in lower_r for q in ["joke", "funny", "laugh"]):
+                        reply_text = (
+                            "Why did the electric motor break up with the bearing? Because it couldn't handle the friction! Whenever you have real equipment trouble, I'm here to help."
+                        )
+                    else:
+                        reply_text = (
+                            "Hello! I'm RecallOps, your equipment troubleshooting assistant. Let me know if you have an appliance, tool, or industrial machine you'd like help diagnosing!"
+                        )
+                elif intent == "UNRELATED_QUERY":
+                    lower_r = raw_message.lower()
+                    if any(w in lower_r for w in ["python", "javascript", "code", "programming", "software"]):
+                        reply_text = (
+                            "RecallOps is a specialized troubleshooting assistant for machinery, appliances, and hardware devices. I don't provide software programming help, but if you have equipment or hardware issues to diagnose, I'm glad to assist!"
+                        )
+                    elif any(w in lower_r for w in ["capital", "france", "paris", "geography", "country"]):
+                        reply_text = (
+                            "RecallOps specializes in equipment diagnostics and learning from verified repair history. I don't answer general geography or trivia questions, but feel free to describe any equipment malfunction or repair issue you need help with!"
+                        )
+                    else:
+                        reply_text = (
+                            "RecallOps is dedicated to equipment troubleshooting and repair intelligence. I focus on machinery, appliances, and electronic devices. Please let me know if you have any equipment issue you'd like to troubleshoot!"
+                        )
                 elif intent == "ACKNOWLEDGMENT":
                     reply_text = (
                         "You're very welcome! I'm here anytime you need equipment troubleshooting, safety precautions, or verified repair history."
@@ -1084,11 +1482,17 @@ class ChatService:
 
         # 9. Adaptive Suggested Follow-Up Prompts
         suggested_followups = []
-        if intent == "CASUAL_GREETING":
+        if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING"):
             suggested_followups = [
                 "My industrial pump is vibrating and overheating.",
                 "My electric motor is making an unusual noise.",
-                "My oven keeps switching off.",
+                "My umbrella won't open.",
+            ]
+        elif intent == "UNRELATED_QUERY":
+            suggested_followups = [
+                "My industrial pump is vibrating and overheating.",
+                "My laptop fan is unusually loud.",
+                "My power bank won't charge.",
             ]
         elif intent == "ACKNOWLEDGMENT":
             suggested_followups = [
@@ -1337,6 +1741,23 @@ class ChatService:
                     sync_error,
                 ),
             )
+
+        # Resolve associated problem episode in SQLite for cross-conversation tracking
+        if req.episode_id:
+            self.resolve_problem_episode(
+                episode_id=req.episode_id,
+                action_taken=req.action_taken,
+            )
+        else:
+            matched_ep = self.find_matching_problem_episode(
+                equipment_name=req.equipment_type,
+                text=f"{req.action_taken} {req.symptoms}",
+            )
+            if matched_ep:
+                self.resolve_problem_episode(
+                    episode_id=matched_ep["id"],
+                    action_taken=req.action_taken,
+                )
 
         # 6. If conversation_id is provided, post a confirmation message into the conversation
         if req.conversation_id:

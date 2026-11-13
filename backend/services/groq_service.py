@@ -66,8 +66,8 @@ class GroqService:
         if self._client is None:
             if not settings.GROQ_API_KEY:
                 raise ValueError("GROQ_API_KEY is not set in environment.")
-            self._http_client = httpx.Client(verify=get_ssl_context())
-            self._client = Groq(api_key=settings.GROQ_API_KEY, http_client=self._http_client)
+            self._http_client = httpx.Client(verify=get_ssl_context(), timeout=8.0)
+            self._client = Groq(api_key=settings.GROQ_API_KEY, http_client=self._http_client, max_retries=1, timeout=8.0)
         return self._client
 
     def investigate_incident(
