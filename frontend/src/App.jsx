@@ -44,7 +44,24 @@ const LEGACY_TABS = [
 export default function App() {
   // RecallOps 2.0 Default Landing Experience: AI Assistant
   const [activeTab, setActiveTab] = useState("assistant");
-  const [activeConversationId, setActiveConversationId] = useState(null);
+  const [activeConversationId, setActiveConversationId] = useState(() => {
+    try {
+      return sessionStorage.getItem("recallops_active_conv") || null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (activeConversationId) {
+        sessionStorage.setItem("recallops_active_conv", activeConversationId);
+      } else {
+        sessionStorage.removeItem("recallops_active_conv");
+      }
+    } catch (_) {}
+  }, [activeConversationId]);
+
   const [mockMemoryMode, setMockMemoryMode] = useState(true); // Default ON to preserve $5 hackathon balance
 
   const [incidents, setIncidents] = useState([]);

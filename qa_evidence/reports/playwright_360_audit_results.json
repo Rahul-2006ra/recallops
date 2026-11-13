@@ -1,0 +1,145 @@
+{
+  "timestamp": "2026-11-13T17:33:14.395Z",
+  "scenarios": [
+    {
+      "code": "A",
+      "name": "Casual conversation without diagnosis",
+      "status": "PASSED",
+      "details": "Friendly English greeting without equipment troubleshooting headers",
+      "screenshot": "audit_scen_A_casual.png"
+    },
+    {
+      "code": "B",
+      "name": "Unrelated question with polite redirection",
+      "status": "PASSED",
+      "details": "Politely redirected to machinery and appliance diagnostics in English",
+      "screenshot": "audit_scen_B_unrelated.png"
+    },
+    {
+      "code": "C",
+      "name": "New equipment problem troubleshooting",
+      "status": "PASSED",
+      "details": "Rendered 4-section evidence-calibrated diagnostic format with precedents",
+      "screenshot": "audit_scen_C_troubleshooting.png"
+    },
+    {
+      "code": "D",
+      "name": "Multi-turn problem explanation",
+      "status": "PASSED",
+      "details": "Connected closed suction valve to pump cavitation & vibration",
+      "screenshot": "audit_scen_D_explanation.png"
+    },
+    {
+      "code": "E",
+      "name": "Equipment switching",
+      "status": "PASSED",
+      "details": "Switched context cleanly to laptop without pump cross-contamination",
+      "screenshot": "audit_scen_E_equipment_switching.png"
+    },
+    {
+      "code": "F",
+      "name": "Successful repair confirmation",
+      "status": "PASSED",
+      "details": "Confirmation card rendered with Save action",
+      "screenshot": "audit_scen_F_successful_repair.png"
+    },
+    {
+      "code": "G",
+      "name": "Failed repair confirmation",
+      "status": "PASSED",
+      "details": "Recognized unsuccessful repair outcome accurately",
+      "screenshot": "audit_scen_G_failed_repair.png"
+    },
+    {
+      "code": "H",
+      "name": "Partial repair outcome",
+      "status": "PASSED",
+      "details": "Recognized partial symptom alleviation with persistent thermal concern",
+      "screenshot": "audit_scen_H_partial_repair.png"
+    },
+    {
+      "code": "I",
+      "name": "Cancelled memory confirmation",
+      "status": "PASSED",
+      "details": "Cancel button cleanly dismissed confirmation card",
+      "screenshot": "audit_scen_I_cancelled_memory.png"
+    },
+    {
+      "code": "J",
+      "name": "Duplicate memory confirmation",
+      "status": "PASSED",
+      "details": "Strict SQLite idx_outcome_idempotency_key rejects duplicates gracefully (Verified in backend test)",
+      "screenshot": null
+    },
+    {
+      "code": "K",
+      "name": "New conversation historical memory retrieval",
+      "status": "PASSED",
+      "details": "Retrieved verified historical precedents from prior plant repairs",
+      "screenshot": "audit_scen_K_memory_retrieval.png"
+    },
+    {
+      "code": "L",
+      "name": "Multiple unresolved equipment episodes",
+      "status": "PASSED",
+      "details": "Verified multiple active problem episodes tracked distinctly in problem_episodes table",
+      "screenshot": null
+    },
+    {
+      "code": "M",
+      "name": "Browser refresh and history restoration",
+      "status": "PASSED",
+      "details": "Session and conversation tree restored seamlessly after full page refresh",
+      "screenshot": "audit_scen_M_browser_refresh.png"
+    },
+    {
+      "code": "N",
+      "name": "Backend restart & persistence",
+      "status": "PASSED",
+      "details": "SQLite database persistence verified with WAL mode across server restarts",
+      "screenshot": null
+    },
+    {
+      "code": "O",
+      "name": "Multilingual typed conversation with English responses",
+      "status": "PASSED",
+      "details": "Comprehended Hindi input and produced 100% English diagnosis without Devanagari text",
+      "screenshot": "audit_scen_O_multilingual_english_only.png"
+    },
+    {
+      "code": "P",
+      "name": "Microphone transcription and editable input",
+      "status": "PASSED",
+      "details": "W3C MediaRecorder HUD active with real-time waveform and cancel/stop controls",
+      "screenshot": "audit_scen_P_mic_hud.png"
+    },
+    {
+      "code": "Q",
+      "name": "Groq failure and safe fallback",
+      "status": "PASSED",
+      "details": "Multi-model candidate failover (120b -> 20b -> 27b) and category-calibrated deterministic schema fallback verified",
+      "screenshot": null
+    },
+    {
+      "code": "R",
+      "name": "Hindsight failure and local memory fallback",
+      "status": "PASSED",
+      "details": "Local SQLite episodic memory functions autonomously when Hindsight Cloud is offline or in mock mode",
+      "screenshot": null
+    },
+    {
+      "code": "S",
+      "name": "Responsive layout and navigation",
+      "status": "PASSED",
+      "details": "Seamless navigation across AI Assistant, My Memories, History, and Settings views",
+      "screenshot": "audit_scen_S_memories_view.png"
+    },
+    {
+      "code": "T",
+      "name": "Full demo journey from new problem to historical learning",
+      "status": "PASSED",
+      "details": "Complete cycle verified: problem report -> diagnosis -> repair execution -> memory save -> future recall",
+      "screenshot": "audit_scen_T_full_journey.png"
+    }
+  ]
+}

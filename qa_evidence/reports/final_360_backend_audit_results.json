@@ -1,0 +1,209 @@
+{
+  "timestamp": "2026-11-13T17:24:05.894705+00:00",
+  "phases_tested": [
+    "Phase 1",
+    "Phase 2",
+    "Phase 3",
+    "Phase 6",
+    "Phase 7",
+    "Phase 8",
+    "Phase 9",
+    "Phase 11"
+  ],
+  "tests": [
+    {
+      "name": "Health & CORS Check",
+      "phase": "Phase 6",
+      "status": "PASSED",
+      "details": "Status healthy, latency 18.08ms",
+      "evidence": {
+        "status": "healthy",
+        "service": "recallops-backend",
+        "environment": "development"
+      }
+    },
+    {
+      "name": "Root Endpoint Contract",
+      "phase": "Phase 6",
+      "status": "PASSED",
+      "details": "Project metadata verified",
+      "evidence": {
+        "project": "RecallOps",
+        "description": "The Self-Learning Industrial Maintenance Agent",
+        "status": "operational",
+        "version": "2.0.0",
+        "ai_engine": "openai/gpt-oss-120b",
+        "memory_bank": "recallops-demo"
+      }
+    },
+    {
+      "name": "System Status & Hindsight Credit Preservation",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Protection verified",
+      "evidence": {
+        "status": "operational",
+        "version": "2.0.0",
+        "ai_engine": "openai/gpt-oss-120b",
+        "memory_bank": "recallops-demo",
+        "hindsight_mock_mode": true,
+        "credit_preservation_active": true
+      }
+    },
+    {
+      "name": "Hindi Greeting -> English Response (Zero Diagnosis)",
+      "phase": "Phase 2 & 7",
+      "status": "PASSED",
+      "details": "Polite English reply, zero equipment diagnosis",
+      "evidence": {
+        "reply": "Namaste! I'm doing well, thanks for asking. How are you? Please let me know if y"
+      }
+    },
+    {
+      "name": "Kannada Off-Topic -> English Redirection",
+      "phase": "Phase 2 & 7",
+      "status": "PASSED",
+      "details": "Redirected to equipment diagnostics in English",
+      "evidence": {
+        "reply": "RecallOps specializes in equipment diagnostics and troubleshooting, not general "
+      }
+    },
+    {
+      "name": "Unseen Speaker Muted Audio Continuity",
+      "phase": "Phase 2 & 7",
+      "status": "PASSED",
+      "details": "Acknowledged muted phone, no bearing wear or LOTO",
+      "evidence": {
+        "reply": "Muting the phone silences the digital audio signal sent via Bluetooth, so the speaker receives no da"
+      }
+    },
+    {
+      "name": "Unseen Microwave Timer Mode Resolution",
+      "phase": "Phase 2 & 7",
+      "status": "PASSED",
+      "details": "Understood timer mode explanation without generic mechanical diagnosis",
+      "evidence": {
+        "reply": "Timer mode only powers the display and clock, not the magnetron, which is why your food did not heat"
+      }
+    },
+    {
+      "name": "CNC Emergency Stop Context Continuity",
+      "phase": "Phase 2 & 7",
+      "status": "PASSED",
+      "details": "Identified E-stop latch mechanism and reset steps",
+      "evidence": {
+        "reply": "That is a very common scenario on the shop floor. An engaged Emergency Stop button directly hard-iso"
+      }
+    },
+    {
+      "name": "Problem Episode Creation in SQLite",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Episode EPISODE-20261113-AF31A8 created with unresolved status",
+      "evidence": {
+        "episode_id": "EPISODE-20261113-AF31A8"
+      }
+    },
+    {
+      "name": "Repair Outcome Detection & Card Generation",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Generated outcome card with ready_to_save and idempotency key",
+      "evidence": {
+        "equipment_type": "Centrifugal Slurry Pump",
+        "symptoms": "My industrial slurry pump casing has severe vibration and high temperature.",
+        "action_taken": "Replaced the worn drive bearings",
+        "outcome_status": "SUCCESSFUL",
+        "verification_status": "TECHNICIAN_CONFIRMED",
+        "verification_source": "Technician Field Report",
+        "idempotency_key": "IDEMP-CONV-20261113-DE5BEC-technicianreplaced",
+        "episode_id": "EPISODE-20261113-AF31A8",
+        "ready_to_save": true
+      }
+    },
+    {
+      "name": "Record Outcome Execution",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Successfully saved to SQLite verified records",
+      "evidence": {
+        "success": true,
+        "incident_id": "INC-20261113-908C7B",
+        "verification_id": "VER-20261113-B00AB1",
+        "hindsight_retained": false,
+        "sync_status": "local_only",
+        "message": "Repair outcome recorded into episodic memory bank successfully.",
+        "document_id": "OUTCOME-INC-20261113-908C7B",
+        "is_duplicate": false
+      }
+    },
+    {
+      "name": "Episode Resolved in SQLite",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Episode transitioned from unresolved -> resolved",
+      "evidence": {
+        "status": "resolved"
+      }
+    },
+    {
+      "name": "Strict Idempotency on Duplicate Confirmation",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Duplicate rejected gracefully without duplicate row",
+      "evidence": {
+        "success": true,
+        "incident_id": "INC-20261113-908C7B",
+        "verification_id": "VER-20261113-B00AB1",
+        "hindsight_retained": false,
+        "sync_status": "local_only",
+        "message": "Repair outcome previously confirmed and recorded (idempotent submission).",
+        "document_id": "OUTCOME-INC-20261113-908C7B",
+        "is_duplicate": true
+      }
+    },
+    {
+      "name": "Cross-Conversation Historical Memory Retrieval",
+      "phase": "Phase 3",
+      "status": "PASSED",
+      "details": "Successfully recalled 2 verified precedents in fresh session",
+      "evidence": {
+        "precedents_count": 2
+      }
+    },
+    {
+      "name": "Reject Empty Audio File",
+      "phase": "Phase 4",
+      "status": "PASSED",
+      "details": "Returned HTTP 400 for 0-byte file",
+      "evidence": {
+        "detail": "Uploaded audio file is empty."
+      }
+    },
+    {
+      "name": "Reject Non-Audio File Format",
+      "phase": "Phase 4",
+      "status": "PASSED",
+      "details": "Returned HTTP 400 for text/plain",
+      "evidence": {
+        "detail": "Unsupported file format 'txt'. Supported audio formats: m4a, mp3, mp4, mpeg, mpga, ogg, wav, webm"
+      }
+    },
+    {
+      "name": "Chat Latency Benchmark",
+      "phase": "Phase 9",
+      "status": "PASSED",
+      "details": "Average turn latency: 579.26ms over 3 queries",
+      "evidence": {
+        "latencies": [
+          536.5999999994528,
+          589.2810000004829,
+          611.8908999997075
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "avg_chat_latency_ms": 579.26
+  }
+}
