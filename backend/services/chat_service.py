@@ -100,6 +100,28 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "door lock": ("Door Lock Mechanism", "household"),
     "door": ("Door Hinge / Mechanism", "household"),
     "lock": ("Lock Mechanism", "household"),
+    "gas stove": ("Gas Stove", "household"),
+    "electric stove": ("Electric Stove", "household"),
+    "stove": ("Gas Stove", "household"),
+    "cooktop": ("Cooktop", "household"),
+    "gas burner": ("Gas Burner", "household"),
+    "burner": ("Gas Burner", "household"),
+    "gas cylinder": ("Gas Cylinder", "household"),
+    "lpg cylinder": ("Gas Cylinder", "household"),
+    "cylinder": ("Gas Cylinder", "household"),
+    "water heater": ("Water Heater", "household"),
+    "geyser": ("Water Heater", "household"),
+    "clothes iron": ("Clothes Iron", "household"),
+    "iron": ("Clothes Iron", "household"),
+    "inverter": ("Power Inverter", "electronic"),
+    "ups": ("Uninterruptible Power Supply", "electronic"),
+    "battery pack": ("Battery Pack", "electronic"),
+    "battery": ("Battery", "electronic"),
+    "power cord": ("Power Cable", "electronic"),
+    "charger": ("Battery Charger", "electronic"),
+    "cable": ("Power / Data Cable", "electronic"),
+    "socket": ("Electrical Socket", "household"),
+    "switch": ("Electrical Switch", "household"),
 }
 
 
@@ -121,7 +143,9 @@ def detect_equipment_entity(text: str) -> Optional[dict[str, Any]]:
     has_problem_indicator = any(w in lower for w in [
         "won't", "wont", "not working", "stopped", "stuck", "broken", "faulty", "creak", "creaking",
         "overheat", "vibrat", "leaking", "smoke", "dead", "shut off", "shuts off", "tripped", "failing",
-        "making noise", "unusual noise", "grinding", "sparking", "blown", "not charging"
+        "making noise", "unusual noise", "grinding", "sparking", "blown", "not charging",
+        "not on", "is not on", "won't turn on", "wont turn on", "won't start", "wont start", "doesn't turn on",
+        "does not turn on", "got over", "ran out", "empty", "no flame", "not lighting", "won't ignite", "no gas"
     ])
 
     non_equipment_words = {
@@ -193,8 +217,8 @@ class ChatService:
                 return "ELECTRICAL SAFETY: Unplug the appliance immediately from the electrical wall outlet. Do not open energized housings; internal servicing should be handled by an authorized technician."
             else:
                 return "HIGH ELECTRICAL HAZARD: Ensure all main circuit breakers are locked out and tagged out (LOTO). Do not touch exposed conductors; verify zero voltage before inspection."
-        elif any(k in lower for k in ["gas", "gas leak", "smell gas"]):
-            return "GAS / EXPLOSION HAZARD: Evacuate the area immediately if gas smell is detected; isolate supply valve and contact certified emergency services."
+        elif any(k in lower for k in ["gas", "cylinder", "lpg", "gas leak", "smell gas"]):
+            return "GAS / EXPLOSION HAZARD: Ensure regulator valve is fully closed before disconnecting or swapping. If gas odor is present, ventilate the area immediately, do not ignite any flame or operate electrical switches, and contact certified services."
         elif any(k in lower for k in ["pressure", "psi", "pneumatic"]):
             if is_household:
                 return "PRESSURE SAFETY: Allow internal chamber to depressurize completely before opening; disconnect power."
@@ -449,6 +473,36 @@ class ChatService:
             )
             return res.rowcount > 0
 
+    def update_problem_episode_cause(
+        self,
+        conversation_id: str,
+        equipment_name: str,
+        cause_description: str,
+    ) -> bool:
+        """Update an unresolved problem episode in SQLite with discovered root cause or user explanation."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with get_db() as conn:
+            ep = conn.execute(
+                """
+                SELECT id, symptoms, original_description FROM problem_episodes
+                WHERE conversation_id = ? AND status = 'unresolved'
+                ORDER BY updated_at DESC LIMIT 1
+                """,
+                (conversation_id,),
+            ).fetchone()
+            if ep:
+                updated_desc = f"{ep['original_description']} | Cause identified: {cause_description}"[:500]
+                conn.execute(
+                    """
+                    UPDATE problem_episodes
+                    SET original_description = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (updated_desc, now_iso, ep["id"]),
+                )
+                return True
+        return False
+
     def classify_intent_and_entities(
         self,
         raw_message: str,
@@ -463,10 +517,51 @@ class ChatService:
         words = re.findall(r'\b[a-zA-Z0-9_-]+\b', lower)
         address_tokens = {
             "recallops", "recall", "ops", "assistant", "bot", "ai", "there",
-            "friend", "bro", "bhai", "yaar", "ji", "sir", "madam", "dear", "agent"
+            "friend", "bro", "broo", "bhai", "yaar", "ji", "sir", "madam", "dear", "agent", "yaa", "yeah"
         }
         stripped_words = [w for w in words if w not in address_tokens]
         stripped_text = " ".join(stripped_words).strip()
+
+        # Check if there is an active equipment context in the conversation history
+        prev_equipment: Optional[dict[str, Any]] = None
+        for m in reversed(conversation_history):
+            m_meta = m.get("metadata", {})
+            eq = m_meta.get("equipment_detected")
+            if eq and isinstance(eq, dict) and eq.get("equipment_type"):
+                prev_equipment = eq
+                break
+
+        # Detect equipment directly in message
+        detected_equipment = detect_equipment_entity(raw_message)
+
+        # 5b. Problem Explanation / Cause update in multi-turn (e.g., "cylinder got over", "battery died", "fuse blew")
+        cause_keywords = [
+            "got over", "ran out", "is empty", "was empty", "empty cylinder", "cylinder empty",
+            "gas empty", "empty gas", "gas over", "cylinder over", "khatam ho gaya", "khatam ho gayi",
+            "khatam", "chala gaya", "battery died", "battery dead", "dead battery", "battery drained",
+            "battery ran out", "battery down", "power cut", "power was out", "power went out",
+            "light chali gayi", "breaker tripped", "fuse blew", "fuse blown", "unplugged",
+            "cord was unplugged", "plug came out", "wire was loose", "plug was loose",
+            "water shut off", "tank empty", "tank is empty", "no fuel", "ran out of fuel",
+            "valve closed", "valve was shut", "regulator off", "switch off", "switch band tha"
+        ]
+
+        has_cause_indication = (
+            any(phrase in lower for phrase in cause_keywords)
+            or (
+                any(w in lower for w in ["cylinder", "gas", "battery", "plug", "cord", "breaker", "fuse", "power", "fuel", "tank", "valve"])
+                and any(w in lower for w in ["over", "empty", "dead", "died", "drained", "blown", "tripped", "loose", "unplugged", "off", "cut", "khatam", "finished", "ended"])
+            )
+            or (
+                any(lower.startswith(p) for p in ["it turns out", "turns out", "actually it", "the reason is", "reason is", "i found out", "looks like it was", "it was just", "yaa broo", "yeah bro", "bro "])
+                and any(w in lower for w in ["cylinder", "gas", "battery", "power", "plug", "wire", "switch", "fuel", "empty", "over", "dead", "off", "khatam"])
+            )
+        )
+
+        is_explanation_or_cause = bool(
+            has_cause_indication
+            and (len(conversation_history) > 0 or prev_equipment is not None or detected_equipment is not None)
+        )
 
         # 1. Casual social conversation, chitchat & greetings
         # Strict context isolation: Zero memory calls, zero diagnostic boilerplate
@@ -477,13 +572,17 @@ class ChatService:
             "kaise ho", "kya haal hai", "kya haal", "subah bakhair", "ram ram"
         ]
         is_greeting = (
-            stripped_text in casual_greetings
-            or any(stripped_text.startswith(g + " ") for g in casual_greetings)
-            or any(
-                lower == g or lower.startswith(g + " ") or lower.startswith(g + "!") or lower.startswith(g + ",") or lower.startswith(g + ".")
-                for g in casual_greetings
+            not is_explanation_or_cause
+            and (
+                stripped_text in casual_greetings
+                or any(stripped_text.startswith(g + " ") for g in casual_greetings)
+                or any(
+                    lower == g or lower.startswith(g + " ") or lower.startswith(g + "!") or lower.startswith(g + ",") or lower.startswith(g + ".")
+                    for g in casual_greetings
+                )
+                or any(lower.endswith(" " + g) for g in casual_greetings)
             )
-            or any(lower.endswith(" " + g) for g in casual_greetings)
+            and len(stripped_words) <= 3
         )
 
         casual_social_patterns = [
@@ -510,8 +609,11 @@ class ChatService:
             "what do you know", "how to use recallops", "what are you for", "who are you and what do you do"
         ]
         is_capabilities_query = (
-            any(phrase in lower for phrase in capabilities_patterns)
-            or stripped_text in ("help", "help me", "what can you do", "what do you do", "can you help")
+            not is_explanation_or_cause
+            and (
+                any(phrase in lower for phrase in capabilities_patterns)
+                or stripped_text in ("help", "help me", "what can you do", "what do you do", "can you help")
+            )
         )
 
         # 3. Unrelated general knowledge, programming, geography, trivia, politics
@@ -528,11 +630,14 @@ class ChatService:
             "what is photosynthesis", "why is the sky blue", "speed of light"
         ]
         is_unrelated = (
-            any(p in lower for p in unrelated_patterns)
-            or (
-                (lower.startswith("what is ") or lower.startswith("who is ") or lower.startswith("where is ") or lower.startswith("when is ") or lower.startswith("how to "))
-                and not any(eq in lower for eq in ["pump", "motor", "compressor", "oven", "mixer", "laptop", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor", "machine", "device", "appliance", "equipment", "screen", "battery", "charger"])
-                and any(w in lower for w in ["python", "france", "paris", "europe", "math", "code", "programming", "capital", "president", "prime minister", "minister", "cake", "pasta", "recipe", "history", "delhi", "washington", "london", "tokyo", "asia", "america", "africa"])
+            not is_explanation_or_cause
+            and (
+                any(p in lower for p in unrelated_patterns)
+                or (
+                    (lower.startswith("what is ") or lower.startswith("who is ") or lower.startswith("where is ") or lower.startswith("when is ") or lower.startswith("how to "))
+                    and not any(eq in lower for eq in ["pump", "motor", "compressor", "oven", "mixer", "laptop", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor", "machine", "device", "appliance", "equipment", "screen", "battery", "charger", "stove", "cylinder"])
+                    and any(w in lower for w in ["python", "france", "paris", "europe", "math", "code", "programming", "capital", "president", "prime minister", "minister", "cake", "pasta", "recipe", "history", "delhi", "washington", "london", "tokyo", "asia", "america", "africa"])
+                )
             )
         )
 
@@ -628,9 +733,6 @@ class ChatService:
             "what is a ", "what is an ", "how does a ", "how does an ", "how does ", "define "
         ]) and any(w in lower for w in ["pump", "motor", "compressor", "oven", "mixer", "bearing", "seal", "valve", "fan", "boiler", "cavitation", "impeller", "stator", "rotor"])
 
-        # Detect equipment directly in message
-        detected_equipment = detect_equipment_entity(raw_message)
-
         # Check for ambiguity cues in multi-turn
         has_ambiguity_cue = any(phrase in lower for phrase in ["which one", "both of them", "which machine", "either of them"])
 
@@ -643,6 +745,7 @@ class ChatService:
             and not is_unrelated
             and not is_acknowledgment
             and not is_outcome_report
+            and not is_explanation_or_cause
             and not is_historical_memory_query
             and not is_simplify
             and not is_technician_question
@@ -657,7 +760,8 @@ class ChatService:
             and not any(eq in lower for eq in [
                 "pump", "motor", "compressor", "oven", "mixer", "fan", "laptop", "pc",
                 "umbrella", "window", "power bank", "bike", "bicycle", "door", "lock", "dishwasher",
-                "toaster", "kettle", "blender", "vacuum", "heater", "chiller", "boiler", "conveyor", "ac"
+                "toaster", "kettle", "blender", "vacuum", "heater", "chiller", "boiler", "conveyor", "ac",
+                "stove", "cylinder"
             ])
             and len(conversation_history) == 0
         )
@@ -679,6 +783,10 @@ class ChatService:
             intent = "CLARIFICATION_NEEDED"
         elif is_outcome_report:
             intent = "REPORT_OUTCOME"
+        elif is_explanation_or_cause:
+            intent = "PROBLEM_EXPLANATION_OR_CAUSE"
+            if not detected_equipment and prev_equipment:
+                detected_equipment = prev_equipment
         elif is_historical_memory_query:
             intent = "HISTORICAL_MEMORY_QUERY"
         elif is_simplify:
@@ -691,6 +799,9 @@ class ChatService:
             intent = "CONCEPT_EXPLANATION"
         elif detected_equipment or any(kw in lower for kw in ["problem", "broken", "issue", "fault", "not working", "won't", "stops", "stopped", "stalled", "vibrat", "overheat", "noise", "loud", "leak", "smoke", "creak", "creaking", "stuck"]):
             intent = "TROUBLESHOOTING_QUERY"
+        elif prev_equipment and any(w in lower for w in ["what", "how", "why", "when", "can", "could", "should", "is", "are", "do", "does", "test", "check", "fix"]):
+            intent = "FOLLOWUP_QUESTION"
+            detected_equipment = prev_equipment
         else:
             intent = "GENERAL_CAPABILITIES_INQUIRY"
 
@@ -1055,7 +1166,7 @@ class ChatService:
         detected_hazard: Optional[str] = None
         active_equipment: Optional[dict[str, Any]] = None
 
-        is_followup_turn = intent.startswith("FOLLOWUP_") or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
+        is_followup_turn = intent.startswith("FOLLOWUP_") or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY", "PROBLEM_EXPLANATION_OR_CAUSE")
 
         NON_EQUIPMENT_INTENTS = (
             "CASUAL_CONVERSATION",
@@ -1077,6 +1188,13 @@ class ChatService:
         elif intent == "CLARIFICATION_NEEDED":
             active_equipment = prev_equipment
             detected_equipment = prev_equipment
+        elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
+            if prev_equipment and matched_equipment_current and "cylinder" in matched_equipment_current["equipment_type"].lower() and "stove" in prev_equipment["equipment_type"].lower():
+                active_equipment = prev_equipment
+            else:
+                active_equipment = prev_equipment or matched_equipment_current
+            detected_equipment = active_equipment
+            is_followup = True
         elif prev_equipment and is_followup_turn:
             # Explicit follow-up questions always inherit previous equipment context
             active_equipment = prev_equipment
@@ -1240,6 +1358,12 @@ class ChatService:
                 symptoms=raw_message,
                 original_description=raw_message,
             )
+        elif intent == "PROBLEM_EXPLANATION_OR_CAUSE" and active_equipment:
+            self.update_problem_episode_cause(
+                conversation_id=conv_id,
+                equipment_name=active_equipment["equipment_type"],
+                cause_description=raw_message,
+            )
 
         # 9. Build Multi-Turn Context and Groq Prompt
         active_eq_name = active_equipment["equipment_type"] if active_equipment else "the equipment"
@@ -1397,18 +1521,59 @@ class ChatService:
                     groq_messages.append({"role": m["role"], "content": m["content"]})
             groq_messages.append({"role": "user", "content": f"USER REPORT: \"{raw_message}\"\n{precedent_text}\nProvide your concise response acknowledging the repair outcome."})
 
-        elif intent in ("GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
+        elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
             system_instruction = (
-                "You are RecallOps — an AI troubleshooting assistant specialized in diagnosing machinery, household appliances, and electronics using verified repair history.\n"
-                "The user is asking what RecallOps is, what you can do, or requesting assistance.\n"
-                "Explain your capabilities warmly, clearly, and concisely (under 60 words).\n"
-                "Mention that users can describe equipment issues (such as pumps, motors, household appliances, electronics) to discover plausible causes, safety precautions, and historical repair precedents.\n"
-                "Do NOT include troubleshooting section headers."
+                f"You are RecallOps — an AI troubleshooting assistant specialized in machinery, appliances, and electronics.\n"
+                f"The user previously reported an issue with their {active_eq_name} and is now explaining the underlying cause: \"{raw_message}\".\n\n"
+                "INSTRUCTIONS:\n"
+                "1. Direct Cause-and-Effect Recognition: Clearly explain in plain English why this cause (such as an empty gas cylinder, depleted battery, or disconnected power) directly explains why the equipment is not functioning or lighting.\n"
+                "2. Actionable Safety Guidance: Provide immediate, practical safety steps (e.g. for gas cylinders: verify regulator valve is shut off before swapping, check rubber O-ring seal, check for gas odor, perform soapy water leak test, never ignite or use open flame if smelling gas, ensure proper room ventilation; for electrical: check cord condition, verify correct voltage, do not handle with wet hands).\n"
+                "3. Operational Next Steps: Briefly outline what to verify once replenished/restored (e.g. checking burner flame color, confirming steady ignition).\n"
+                "4. STRICT CONSTRAINTS:\n"
+                "- Do NOT introduce yourself ('I am RecallOps, an AI that helps you...').\n"
+                "- Do NOT ask disconnected generic questions ('Tell me what's happening with your cylinder...').\n"
+                "- Do NOT repeat troubleshooting section headers (Plausible Causes, Safety Alert, etc.).\n"
+                "- Relevant Memory Insight: If no matching historical repair records exist, you may concisely note that no prior repair incident was recorded for this issue. NEVER invent historical repair statistics or fabricate past repairs.\n"
+                "- Keep the response helpful, direct, and under 130 words."
             )
-            groq_messages = [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": raw_message},
-            ]
+            groq_messages = [{"role": "system", "content": system_instruction}]
+            for m in conversation_history[-6:]:
+                if m["role"] in ("user", "assistant"):
+                    groq_messages.append({"role": m["role"], "content": m["content"]})
+            groq_messages.append({
+                "role": "user",
+                "content": (
+                    f"USER ROOT CAUSE UPDATE: \"{raw_message}\"\n\n"
+                    f"ACTIVE EQUIPMENT: {active_eq_name}\n"
+                    f"IDENTIFIED HAZARD: {detected_hazard or 'Standard domestic safety precautions'}\n\n"
+                    f"{precedent_text}\n"
+                    f"Provide your concise, safety-first response connecting this root cause to the equipment issue."
+                ),
+            })
+
+        elif intent in ("GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
+            if len(conversation_history) > 0 and prev_equipment:
+                system_instruction = (
+                    f"You are RecallOps. The user is in an active troubleshooting session regarding their {prev_equipment['equipment_type']}.\n"
+                    "Helpfully and concisely address their inquiry, reminding them how you can assist with their current equipment issue (inspecting symptoms, safety precautions, historical repair precedents), without repeating a full introductory monologue."
+                )
+                groq_messages = [{"role": "system", "content": system_instruction}]
+                for m in conversation_history[-4:]:
+                    if m["role"] in ("user", "assistant"):
+                        groq_messages.append({"role": m["role"], "content": m["content"]})
+                groq_messages.append({"role": "user", "content": raw_message})
+            else:
+                system_instruction = (
+                    "You are RecallOps — an AI troubleshooting assistant specialized in diagnosing machinery, household appliances, and electronics using verified repair history.\n"
+                    "The user is asking what RecallOps is, what you can do, or requesting assistance.\n"
+                    "Explain your capabilities warmly, clearly, and concisely (under 60 words).\n"
+                    "Mention that users can describe equipment issues (such as pumps, motors, household appliances, electronics) to discover plausible causes, safety precautions, and historical repair precedents.\n"
+                    "Do NOT include troubleshooting section headers."
+                )
+                groq_messages = [
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": raw_message},
+                ]
 
         elif intent == "AMBIGUOUS_QUERY":
             direct_reply = (
@@ -1438,7 +1603,7 @@ class ChatService:
                 "Safety Alert:\n"
                 f"{device_safety_instruction}\n\n"
                 "Relevant Memory Insight:\n"
-                f"- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below for {active_eq_name}. Mention the machine ID (e.g. M-112 or EQ-FIELD), what action was taken, and state whether the repair SUCCEEDED or was UNSUCCESSFUL. Clearly emphasize that the previous repair is historical evidence, not definitive proof of the current cause. If no matching memory exists, state in 1 sentence that no historical record was found in memory for this symptom.\n\n"
+                f"- In 1 or 2 short sentences, state what past plant experience shows from the retrieved memory below for {active_eq_name}. Mention the machine ID (e.g. M-112 or EQ-FIELD), what action was taken, and state whether the repair SUCCEEDED or was UNSUCCESSFUL. Clearly emphasize that the previous repair is historical evidence, not definitive proof of the current cause. If no matching memory exists, state in exactly 1 sentence: 'No historical repair records were found in memory for this issue.' NEVER fabricate hypothetical past repairs, machine IDs, or statistics.\n\n"
                 "Question for Technician:\n"
                 "- Exactly 1 targeted, practical question the user can ask their certified maintenance technician.\n\n"
                 "CONSTRAINTS:\n"
@@ -1551,7 +1716,7 @@ class ChatService:
                             "Review the precedent records below for exact actions taken and recorded outcomes."
                         )
                     else:
-                        reply_text = f"No historical repair records matching these symptoms were found in memory for {active_eq_name}."
+                        reply_text = "No historical repair records were found in memory for this issue."
                 elif intent in ("FOLLOWUP_SIMPLIFY",):
                     reply_text = (
                         f"In simpler terms, parts inside the {active_eq_name} might be rubbing or off-balance, or dust and debris may be blocking airflow, making the unit run much hotter than normal."
@@ -1560,6 +1725,31 @@ class ChatService:
                     reply_text = (
                         f"Here is what you can ask your technician: 'Could you measure the shaft alignment, verify bearing play, and inspect the cooling passages on this {active_eq_name}?'"
                     )
+                elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
+                    lower_r = raw_message.lower()
+                    if any(k in lower_r for k in ["cylinder", "gas", "lpg"]):
+                        reply_text = (
+                            f"An empty gas cylinder directly explains why your {active_eq_name} won't turn on or ignite. "
+                            "When replacing or connecting a new cylinder, ensure the regulator valve is turned completely off before detaching. "
+                            "Once the new cylinder is securely fitted, check for proper sealing and ensure there is no smell of gas before attempting ignition—never use an open flame to check for leaks. "
+                            "If you detect any gas odor, ventilate the area immediately and do not operate electrical switches."
+                        )
+                    elif any(k in lower_r for k in ["battery", "charge", "charger"]):
+                        reply_text = (
+                            f"A depleted battery directly explains why your {active_eq_name} is not powering on. "
+                            "Inspect the charging port and cable for physical debris or damage, then connect to a verified charger and allow it to charge for at least 15–30 minutes before testing."
+                        )
+                    elif any(k in lower_r for k in ["plug", "cord", "power", "breaker", "fuse", "switch"]):
+                        reply_text = (
+                            f"A disconnected power source or tripped circuit breaker directly explains why your {active_eq_name} won't turn on. "
+                            "Ensure the power cord is firmly seated in a live outlet and check your electrical panel to verify no breakers have tripped before attempting to turn it back on."
+                        )
+                    else:
+                        reply_text = (
+                            f"That explains why your {active_eq_name} was not functioning properly. "
+                            "Once this is replenished or restored, safely inspect the connections and test operation. "
+                            "Ensure all standard safety precautions are followed before restarting the equipment."
+                        )
                 elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_EXPLANATION", "FOLLOWUP_QUESTION", "FOLLOWUP_GENERAL") or is_followup:
                     eq_lower = active_eq_name.lower()
                     if "oven" in eq_lower:
@@ -1591,7 +1781,7 @@ class ChatService:
                             "Note: Past repairs serve as historical evidence, not definitive proof for this incident."
                         )
                     else:
-                        top_mem_summary = f"No historical or previous repair records were found in memory for this {active_eq_name}."
+                        top_mem_summary = "No historical repair records were found in memory for this issue."
 
                     is_hh = active_equipment.get("category") in ("household", "electronic") if active_equipment else False
                     safety_line = (
@@ -1619,30 +1809,92 @@ class ChatService:
 
         # 9. Adaptive Suggested Follow-Up Prompts
         suggested_followups = []
+        is_active_conv = len(conversation_history) > 0 or prev_equipment is not None
+        eq_ctx = active_equipment or prev_equipment
+        eq_name_ctx = eq_ctx["equipment_type"].lower() if eq_ctx else ""
+
         if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING", "GENERAL_CAPABILITIES_INQUIRY", "GENERAL_INQUIRY"):
-            suggested_followups = [
-                "My industrial pump is vibrating and overheating.",
-                "My electric motor is making an unusual noise.",
-                "My umbrella won't open.",
-            ]
+            if is_active_conv and eq_ctx:
+                if "stove" in eq_name_ctx or "cylinder" in eq_name_ctx or "burner" in eq_name_ctx:
+                    suggested_followups = [
+                        "How do I safely connect a new gas cylinder?",
+                        "How do I check for gas leaks using soapy water?",
+                        "What should I do if the burner still won't light?",
+                    ]
+                elif "motor" in eq_name_ctx:
+                    suggested_followups = [
+                        "What causes motor overheating under normal load?",
+                        "How to inspect motor stator and rotor air gap?",
+                        "Check previous motor repair precedents",
+                    ]
+                elif "pump" in eq_name_ctx:
+                    suggested_followups = [
+                        "How to check bearing lubrication on this pump",
+                        "What should I ask my technician about shaft alignment?",
+                        "Has this happened before in previous repair records?",
+                    ]
+                else:
+                    suggested_followups = [
+                        f"What questions should I ask my technician about the {eq_ctx['equipment_type']}?",
+                        f"Has this issue occurred before on the {eq_ctx['equipment_type']}?",
+                        f"What safety precautions should I take before inspecting?",
+                    ]
+            else:
+                suggested_followups = [
+                    "My industrial pump is vibrating and overheating.",
+                    "My electric motor is making an unusual noise.",
+                    "My umbrella won't open.",
+                ]
+        elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
+            if "stove" in eq_name_ctx or "cylinder" in eq_name_ctx or "burner" in eq_name_ctx or any(k in raw_message.lower() for k in ["gas", "cylinder", "lpg"]):
+                suggested_followups = [
+                    "How do I safely connect a new gas cylinder?",
+                    "How do I check for gas leaks using soapy water?",
+                    "What should I do if the burner still won't light?",
+                ]
+            elif "battery" in eq_name_ctx or any(k in raw_message.lower() for k in ["battery", "charge", "charger"]):
+                suggested_followups = [
+                    "How long should I let the battery charge before testing?",
+                    "What if it still doesn't turn on after charging?",
+                    "How can I check if the charger or cable is damaged?",
+                ]
+            else:
+                suggested_followups = [
+                    f"What safety checks should I perform on the {active_eq_name}?",
+                    f"What should I do if the {active_eq_name} still doesn't work?",
+                    "What questions should I ask my technician?",
+                ]
         elif intent == "AMBIGUOUS_QUERY":
-            suggested_followups = [
-                "My industrial pump is vibrating and overheating.",
-                "My ceiling fan makes a clicking noise.",
-                "My microwave won't heat food.",
-            ]
+            if is_active_conv and eq_ctx:
+                suggested_followups = []
+            else:
+                suggested_followups = [
+                    "My industrial pump is vibrating and overheating.",
+                    "My ceiling fan makes a clicking noise.",
+                    "My microwave won't heat food.",
+                ]
         elif intent == "UNRELATED_QUERY":
-            suggested_followups = [
-                "My industrial pump is vibrating and overheating.",
-                "My laptop fan is unusually loud.",
-                "My power bank won't charge.",
-            ]
+            if is_active_conv and eq_ctx:
+                suggested_followups = []
+            else:
+                suggested_followups = [
+                    "My industrial pump is vibrating and overheating.",
+                    "My laptop fan is unusually loud.",
+                    "My power bank won't charge.",
+                ]
         elif intent == "ACKNOWLEDGMENT":
-            suggested_followups = [
-                "Check my saved memories",
-                "Start a new troubleshooting question",
-                "Show recent repairs",
-            ]
+            if is_active_conv and eq_ctx:
+                suggested_followups = [
+                    f"Check repair history for {eq_ctx['equipment_type']}",
+                    "Save a verified repair to plant memory",
+                    "Start a new troubleshooting question",
+                ]
+            else:
+                suggested_followups = [
+                    "Check my saved memories",
+                    "Start a new troubleshooting question",
+                    "Show recent repairs",
+                ]
         elif intent == "CONCEPT_EXPLANATION":
             suggested_followups = [
                 "How does bearing wear cause excessive vibration?",
@@ -1673,18 +1925,39 @@ class ChatService:
                 "Can you explain that in simpler words?",
                 "Which replacement parts were used?",
             ]
-        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL"):
-            suggested_followups = [
-                "What specific questions should I ask my technician?",
-                "Can you explain in simpler words?",
-                "How can I prevent this in the future?",
-            ]
+        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL", "FOLLOWUP_QUESTION"):
+            if "stove" in eq_name_ctx or "cylinder" in eq_name_ctx:
+                suggested_followups = [
+                    "How do I check for gas leaks using soapy water?",
+                    "What should I do if the burner still won't light?",
+                    "What should I ask my technician?",
+                ]
+            else:
+                suggested_followups = [
+                    "What specific questions should I ask my technician?",
+                    "Can you explain in simpler words?",
+                    "How can I prevent this in the future?",
+                ]
         else:
-            suggested_followups = [
-                "Can you explain the most likely cause in simpler words?",
-                "What specific questions should I ask my technician?",
-                "What safety steps must I take before opening the housing?",
-            ]
+            if is_active_conv and eq_ctx:
+                if "stove" in eq_name_ctx or "cylinder" in eq_name_ctx:
+                    suggested_followups = [
+                        "How do I safely connect a new gas cylinder?",
+                        "How do I check for gas leaks using soapy water?",
+                        "What should I do if the burner still won't light?",
+                    ]
+                else:
+                    suggested_followups = [
+                        f"Can you explain the most likely cause for {eq_ctx['equipment_type']} in simpler words?",
+                        f"What specific questions should I ask my technician about {eq_ctx['equipment_type']}?",
+                        "What safety steps must I take before physical inspection?",
+                    ]
+            else:
+                suggested_followups = [
+                    "Can you explain the most likely cause in simpler words?",
+                    "What specific questions should I ask my technician?",
+                    "What safety steps must I take before opening the housing?",
+                ]
 
         # 10. Persist messages to SQLite
         user_msg_id = generate_id("MSG-USR")
