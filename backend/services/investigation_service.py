@@ -415,12 +415,17 @@ class InvestigationService:
             "verified_at": now_iso,
         }
         try:
-            hindsight_service.retain_incident_outcome(
+            ret_resp = hindsight_service.retain_incident_outcome(
                 incident=incident.model_dump(),
                 repair=repair_dict,
                 verification=verification_dict,
             )
-            retained_flag = True
+            success = True
+            if hasattr(ret_resp, "success"):
+                success = bool(ret_resp.success)
+            elif isinstance(ret_resp, dict) and "success" in ret_resp:
+                success = bool(ret_resp["success"])
+            retained_flag = success
         except Exception as e:
             status = getattr(e, "status", None)
             logger.warning("Failed to retain outcome into Hindsight Cloud (status=%s). Verification recorded locally.", status)

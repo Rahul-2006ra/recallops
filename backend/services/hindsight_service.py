@@ -103,11 +103,26 @@ class HindsightService:
             results = []
             if hasattr(response, "results") and response.results:
                 for item in response.results:
+                    score_val = None
+                    scores_obj = getattr(item, "scores", None)
+                    if scores_obj is not None:
+                        score_val = getattr(scores_obj, "final", None) or getattr(scores_obj, "semantic", None)
+                    if score_val is None:
+                        score_val = getattr(item, "score", None)
+
+                    ts_val = (
+                        getattr(item, "occurred_start", None)
+                        or getattr(item, "mentioned_at", None)
+                        or getattr(item, "timestamp", "")
+                    )
+
                     results.append({
                         "text": getattr(item, "text", str(item)),
-                        "score": getattr(item, "score", None),
-                        "timestamp": str(getattr(item, "timestamp", "")),
+                        "score": score_val,
+                        "timestamp": str(ts_val) if ts_val else "",
                         "document_id": getattr(item, "document_id", None),
+                        "tags": getattr(item, "tags", None),
+                        "metadata": getattr(item, "metadata", None),
                     })
             logger.info("Hindsight recall returned %d memory items.", len(results))
             return results

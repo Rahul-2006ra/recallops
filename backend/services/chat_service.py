@@ -1284,13 +1284,24 @@ class ChatService:
                     "follow_up_metrics": req.follow_up_metrics,
                     "verified_at": now_iso,
                 }
-                hindsight_service.retain_incident_outcome(
+                ret_resp = hindsight_service.retain_incident_outcome(
                     incident=incident_dict,
                     repair=repair_dict,
                     verification=verification_dict,
                 )
-                hindsight_retained = True
-                sync_status = "synced"
+                success = True
+                if hasattr(ret_resp, "success"):
+                    success = bool(ret_resp.success)
+                elif isinstance(ret_resp, dict) and "success" in ret_resp:
+                    success = bool(ret_resp["success"])
+
+                if success:
+                    hindsight_retained = True
+                    sync_status = "synced"
+                else:
+                    hindsight_retained = False
+                    sync_status = "sync_failed"
+                    sync_error = "Hindsight retain returned success=False"
             except Exception as e:
                 logger.warning("Live Hindsight retain failed: %s. Local record preserved with sync_status='sync_failed'.", e)
                 hindsight_retained = False
@@ -1420,22 +1431,42 @@ class ChatService:
                 "follow_up_metrics": json.loads(row["follow_up_metrics"]) if row["follow_up_metrics"] else None,
                 "verified_at": datetime.now(timezone.utc).isoformat(),
             }
-            hindsight_service.retain_incident_outcome(
+            ret_resp = hindsight_service.retain_incident_outcome(
                 incident=incident_dict,
                 repair=repair_dict,
                 verification=verification_dict,
             )
-            with get_db() as conn:
-                conn.execute(
-                    "UPDATE outcome_verifications SET sync_status = 'synced', hindsight_retained = 1, sync_error = NULL WHERE id = ?",
-                    (verification_id,),
-                )
-            return {
-                "success": True,
-                "sync_status": "synced",
-                "message": "Successfully synchronized with Hindsight Cloud.",
-                "document_id": row["hindsight_document_id"],
-            }
+            success = True
+            if hasattr(ret_resp, "success"):
+                success = bool(ret_resp.success)
+            elif isinstance(ret_resp, dict) and "success" in ret_resp:
+                success = bool(ret_resp["success"])
+
+            if success:
+                with get_db() as conn:
+                    conn.execute(
+                        "UPDATE outcome_verifications SET sync_status = 'synced', hindsight_retained = 1, sync_error = NULL WHERE id = ?",
+                        (verification_id,),
+                    )
+                return {
+                    "success": True,
+                    "sync_status": "synced",
+                    "message": "Successfully synchronized with Hindsight Cloud.",
+                    "document_id": row["hindsight_document_id"],
+                }
+            else:
+                err_msg = "Hindsight retain returned success=False"
+                with get_db() as conn:
+                    conn.execute(
+                        "UPDATE outcome_verifications SET sync_status = 'sync_failed', sync_error = ? WHERE id = ?",
+                        (err_msg, verification_id),
+                    )
+                return {
+                    "success": False,
+                    "sync_status": "sync_failed",
+                    "message": f"Sync retry failed: {err_msg}",
+                    "document_id": row["hindsight_document_id"],
+                }
         except Exception as e:
             err_msg = str(e)[:250]
             with get_db() as conn:
