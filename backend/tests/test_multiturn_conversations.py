@@ -80,7 +80,7 @@ def test_scenario_a_mixer_grinder_multiturn():
     )
     assert r4.status_code == 200
     d4 = r4.json()
-    assert d4["intent"] == "HISTORY_QUERY"
+    assert d4["intent"] in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
     assert len(d4["retrieved_precedents"]) > 0
     assert d4["retrieved_precedents"][0]["machine_id"] == "EQ-FIELD"
 
@@ -312,7 +312,7 @@ def test_scenario_f_consistent_memory_provenance():
     )
     assert r2.status_code == 200
     d2 = r2.json()
-    assert d2["intent"] == "HISTORY_QUERY"
+    assert d2["intent"] in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
     assert len(d2["retrieved_precedents"]) > 0
     p2 = d2["retrieved_precedents"][0]
 
@@ -321,6 +321,147 @@ def test_scenario_f_consistent_memory_provenance():
     assert p2["source"] == source_turn1
     assert p2["source_label"] == label_turn1
     assert p2["verification_status"] == verif_turn1
+
+
+def test_scenario_exact_pump_historical_memory_four_turns():
+    """Exact manual testing reproduction:
+    1. 'My industrial pump is vibrating and overheating. What could be wrong?'
+    2. 'Can you explain that in simpler words?'
+    3. 'What should I ask my technician?'
+    4. 'Has a similar problem happened before?'
+    Step 4 must directly answer the historical-memory question without generating the rigid 4 troubleshooting sections.
+    """
+    # Turn 1: Initial troubleshooting
+    r1 = client.post(
+        "/api/chat",
+        json={
+            "message": "My industrial pump is vibrating and overheating. What could be wrong?",
+            "mock_memory": True,
+        },
+    )
+    assert r1.status_code == 200
+    d1 = r1.json()
+    conv_id = d1["conversation_id"]
+    assert d1["intent"] == "TROUBLESHOOTING_QUERY"
+    assert "Pump" in d1["equipment_detected"]["equipment_type"]
+    assert len(d1["retrieved_precedents"]) > 0
+    assert "Plausible Causes" in d1["reply"]
+
+    # Turn 2: Simpler words follow-up
+    r2 = client.post(
+        "/api/chat",
+        json={
+            "message": "Can you explain that in simpler words?",
+            "conversation_id": conv_id,
+            "mock_memory": True,
+        },
+    )
+    assert r2.status_code == 200
+    d2 = r2.json()
+    assert d2["intent"] == "FOLLOWUP_SIMPLIFY"
+    assert len(d2["retrieved_precedents"]) == 0
+    assert "Plausible Causes:" not in d2["reply"]
+
+    # Turn 3: Technician questions follow-up
+    r3 = client.post(
+        "/api/chat",
+        json={
+            "message": "What should I ask my technician?",
+            "conversation_id": conv_id,
+            "mock_memory": True,
+        },
+    )
+    assert r3.status_code == 200
+    d3 = r3.json()
+    assert d3["intent"] == "FOLLOWUP_TECHNICIAN_QUESTIONS"
+    assert len(d3["retrieved_precedents"]) == 0
+    assert "Plausible Causes:" not in d3["reply"]
+
+    # Turn 4: Historical-memory follow-up question
+    r4 = client.post(
+        "/api/chat",
+        json={
+            "message": "Has a similar problem happened before?",
+            "conversation_id": conv_id,
+            "mock_memory": True,
+        },
+    )
+    assert r4.status_code == 200
+    d4 = r4.json()
+
+    # 1. Dedicated intent
+    assert d4["intent"] == "HISTORICAL_MEMORY_QUERY"
+
+    # 2. Equipment context preserved (Centrifugal Slurry Pump)
+    assert d4["equipment_detected"] is not None
+    assert "Pump" in d4["equipment_detected"]["equipment_type"]
+
+    # 3. Displays relevant historical precedent cards
+    assert len(d4["retrieved_precedents"]) > 0
+    prec_ids = [p["machine_id"] for p in d4["retrieved_precedents"]]
+    assert any("M-" in mid for mid in prec_ids)
+
+    # 4. Distinguishes successful vs unsuccessful precedents
+    statuses = [p["outcome_status"] for p in d4["retrieved_precedents"]]
+    assert "SUCCESSFUL" in statuses or "UNSUCCESSFUL" in statuses
+
+    # 5. Audit mock verification labels: NEVER fake 'INDEPENDENTLY_VERIFIED' in mock mode
+    for p in d4["retrieved_precedents"]:
+        assert p["verification_status"] in ("TECHNICIAN_CONFIRMED", "SAMPLE_RECORD", "USER_REPORTED")
+        assert p["verification_status"] != "INDEPENDENTLY_VERIFIED"
+
+    # 6. No Plausible Causes, Safety Alert, or Question for Technician sections
+    reply = d4["reply"]
+    assert "Plausible Causes:" not in reply
+    assert "Safety Alert:" not in reply
+    assert "Question for Technician:" not in reply
+    assert d4["hazard_warning"] is None
+
+    # 7. Concise direct answer (< 120 words)
+    words = reply.split()
+    assert len(words) < 120
+
+
+def test_historical_memory_query_variations():
+    """Verify variations of historical memory queries in an active troubleshooting session."""
+    variations = [
+        "Has this happened before?",
+        "Have we seen this issue previously?",
+        "What worked last time?",
+        "Which repairs failed?",
+    ]
+
+    for q in variations:
+        # Start a troubleshooting session
+        r_start = client.post(
+            "/api/chat",
+            json={
+                "message": "Our industrial pump is vibrating and overheating.",
+                "mock_memory": True,
+            },
+        )
+        assert r_start.status_code == 200
+        conv_id = r_start.json()["conversation_id"]
+
+        # Follow up with historical memory query variation
+        r_var = client.post(
+            "/api/chat",
+            json={
+                "message": q,
+                "conversation_id": conv_id,
+                "mock_memory": True,
+            },
+        )
+        assert r_var.status_code == 200
+        d_var = r_var.json()
+
+        # Must be recognized as HISTORICAL_MEMORY_QUERY
+        assert d_var["intent"] == "HISTORICAL_MEMORY_QUERY", f"Failed for query '{q}' -> got {d_var['intent']}"
+        assert len(d_var["retrieved_precedents"]) > 0
+        assert "Plausible Causes:" not in d_var["reply"]
+        assert "Question for Technician:" not in d_var["reply"]
+        assert d_var["hazard_warning"] is None
+
 
 
 def test_scenario_g_device_appropriate_safety_household_vs_industrial():

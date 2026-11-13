@@ -393,8 +393,18 @@ class ChatService:
                 else f"Relevant equipment precedent for {r.equipment_type} ({r.machine_id})."
             )
 
-            is_independently_verified = any(k in (r.verified_by or "").upper() for k in ["LEAD-ENG", "AUDIT", "CERT"])
-            verification_status = "INDEPENDENTLY_VERIFIED" if is_independently_verified else "TECHNICIAN_CONFIRMED"
+            # Audit verification labels: independently verified must only appear when genuine independent verification evidence exists
+            is_independently_verified = (
+                not mock_mode
+                and any(k in (r.verified_by or "").upper() for k in ["AUDIT", "CERT", "ISO", "INDEPENDENT"])
+                and "independent" in (r.inspection_notes or "").lower()
+            )
+            if is_independently_verified:
+                verification_status = "INDEPENDENTLY_VERIFIED"
+            elif mock_mode:
+                verification_status = "TECHNICIAN_CONFIRMED" if (r.verified_by or r.action_taken) else "SAMPLE_RECORD"
+            else:
+                verification_status = "TECHNICIAN_CONFIRMED" if r.verified_by else "USER_REPORTED"
             source_key = "sample_fixture" if mock_mode else "sqlite_local_db"
             source_tag = "Sample Memory (Demo Mode)" if mock_mode else "Local Plant Audit Log"
 
@@ -536,48 +546,66 @@ class ChatService:
             "we replaced", "we changed"
         ])
 
-        # Explicit request for past repair history or memory records
-        is_explicit_memory_request = any(phrase in lower_msg for phrase in [
-            "what happened", "history", "previous incident", "past repair", "prior repair",
-            "has this happened before", "have we seen this", "show me past", "repair records",
-            "memory records", "precedents", "what was done before", "did anyone fix this before",
-            "past experience", "historical"
-        ])
+        # Dedicated HISTORICAL_MEMORY_QUERY recognition
+        # Handles variations: "Has this happened before?", "Have we seen this issue previously?",
+        # "What worked last time?", "Which repairs failed?", "Has a similar problem happened before?", etc.
+        hist_phrases = [
+            "happened before", "happened previously", "seen this before", "seen this issue previously",
+            "seen this problem", "have we seen this", "has this happened", "have we encountered",
+            "worked last time", "worked before", "worked previously", "repairs failed", "repair failed",
+            "repairs succeeded", "repair succeeded", "repairs worked", "what worked", "which repairs",
+            "what happened before", "previous incident", "prior incident", "past incident",
+            "past repair", "prior repair", "previous repair", "repair record", "repair history",
+            "history of this", "what was done before", "what was done last time", "did anyone fix this before",
+            "how was this fixed before", "past experience", "historical record", "historical incident",
+            "historical precedent", "historical memory", "in our history", "plant history", "past failure", "prior failure",
+            "similar problem happened", "similar issue happened", "similar incident", "like this happened before",
+            "like this occurred", "occurred before", "occurred previously", "seen before",
+            "occurred in past", "occurred in previous", "happened on any other", "past repair records"
+        ]
+        is_historical_memory_query = (
+            any(phrase in lower_msg for phrase in hist_phrases)
+            or (
+                any(w in lower_msg for w in ["happen", "occur", "seen", "worked", "failed", "fixed", "done", "record", "history", "precedent", "experience"])
+                and any(w in lower_msg for w in ["before", "previously", "last time", "prior", "past", "earlier", "history"])
+            )
+        )
+        is_explicit_memory_request = is_historical_memory_query
 
         # Simplify follow-up inquiry
         is_simplify = any(phrase in lower_msg for phrase in [
             "simpler words", "simpler terms", "explain that more simply", "explain more simply",
             "can you explain in simpler", "explain in simpler", "plain english", "too technical",
             "dumb it down", "make it simpler", "eli5", "in simpler words", "simpler"
-        ])
+        ]) and not is_historical_memory_query
 
         # Technician question inquiry
         is_technician_question = any(phrase in lower_msg for phrase in [
             "ask my technician", "ask the technician", "questions should i ask",
             "what should i ask my technician", "what specific questions", "what to ask the technician",
             "what should i tell the technician", "tell my technician", "questions for the technician"
-        ])
+        ]) and not is_historical_memory_query
 
         # Why or How causal inquiry
         is_why_or_how = any(phrase in lower_msg for phrase in [
             "why might that happen", "why does it", "why do they", "why would that happen",
             "how do you know", "why does that cause", "what causes that", "why is that",
             "can you elaborate", "could it be"
-        ])
+        ]) and not is_historical_memory_query
 
         # Educational / Conceptual inquiry
         is_concept_query = any(lower_msg.startswith(p) for p in [
             "what is a ", "what is an ", "what is ", "what are ",
             "how does a ", "how does an ", "how does ", "define "
-        ]) and not is_outcome_report and not is_simplify and not is_technician_question and not is_followup and not is_explicit_memory_request
+        ]) and not is_outcome_report and not is_simplify and not is_technician_question and not is_followup and not is_historical_memory_query
 
         # Equipment Troubleshooting Query
-        is_troubleshooting = any(phrase in lower_msg for phrase in [
+        is_troubleshooting = (any(phrase in lower_msg for phrase in [
             "overheating", "overheat", "vibrating", "vibration", "noise", "loud", "smoke", "leaking", "leak",
             "shutting down", "switching off", "turns off", "shuts off", "tripping", "broken",
             "stopped", "stalled", "not starting", "error", "problem", "fault", "failure", "flutter",
             "won't turn on", "not turning on", "won't start"
-        ]) or (matched_equipment_current is not None and not is_greeting and not is_concept_query and not is_outcome_report and not is_explicit_memory_request)
+        ]) or (matched_equipment_current is not None and not is_greeting and not is_concept_query and not is_outcome_report)) and not is_historical_memory_query
 
         if ambiguity_detected:
             intent = "CLARIFICATION_NEEDED"
@@ -587,8 +615,8 @@ class ChatService:
             intent = "ACKNOWLEDGMENT"
         elif is_outcome_report:
             intent = "REPORT_OUTCOME"
-        elif is_explicit_memory_request:
-            intent = "HISTORY_QUERY"
+        elif is_historical_memory_query:
+            intent = "HISTORICAL_MEMORY_QUERY"
         elif is_simplify:
             intent = "FOLLOWUP_SIMPLIFY"
         elif is_technician_question:
@@ -604,27 +632,41 @@ class ChatService:
         else:
             intent = "GENERAL_INQUIRY"
 
+        # Suppress hazard warning on historical memory inquiries to prevent unsolicited Safety Alert banners
+        if is_historical_memory_query:
+            detected_hazard = None
+
         # 6. Retrieve Precedents & Determine Memory Card Visibility
         mock_mode = req.mock_memory if req.mock_memory is not None else settings.HINDSIGHT_MOCK_MODE
 
         active_precedents: list[PrecedentRecord] = []
-        if is_explicit_memory_request and is_followup and prev_precedents:
+        if (is_historical_memory_query or intent == "HISTORICAL_MEMORY_QUERY") and is_followup and prev_precedents:
             # In an active conversation, asking about history/records refers to the active incident's precedents
             active_precedents = prev_precedents
-        elif is_explicit_memory_request or intent in ("TROUBLESHOOTING_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
+        elif is_historical_memory_query or intent in ("TROUBLESHOOTING_QUERY", "HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY", "REPORT_OUTCOME"):
             eq_type = active_equipment["equipment_type"] if active_equipment else None
+            query_for_retrieval = raw_message
+            if is_followup and not any(w in raw_message.lower() for w in ["vibrat", "temp", "overheat", "noise", "leak"]):
+                for m in conversation_history:
+                    if m["role"] == "user" and any(w in m["content"].lower() for w in ["vibrat", "overheat", "noise", "stop", "shuts off"]):
+                        query_for_retrieval = f"{m['content']} {raw_message}"
+                        break
             active_precedents = self.retrieve_precedents(
-                query=raw_message,
+                query=query_for_retrieval,
                 mock_mode=mock_mode,
                 equipment_type=eq_type,
             )
         elif is_followup:
             active_precedents = prev_precedents
 
-        # Context-aware memory card suppression:
-        # Show precedent cards on initial troubleshooting requests or when user specifically requests past repair evidence.
-        # Do not repeatedly display identical cards for simple follow-ups (simplifications, technician questions, causal inquiries, greetings, acknowledgments).
-        show_memory_cards = (intent == "TROUBLESHOOTING_QUERY" and not is_followup) or is_explicit_memory_request or intent == "HISTORY_QUERY"
+        # Context-aware memory card display:
+        # Precedent cards are displayed on initial troubleshooting questions or when the user specifically asks a historical-memory question.
+        # Cards are suppressed on simple follow-ups (simplifications, technician questions, causal inquiries, greetings, acknowledgments).
+        show_memory_cards = (
+            (intent == "TROUBLESHOOTING_QUERY" and not is_followup)
+            or is_historical_memory_query
+            or intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY")
+        )
         retrieved_precedents_for_response = active_precedents if show_memory_cards else []
 
         # 7. Extract Outcome Facts with Grounding
@@ -763,22 +805,24 @@ class ChatService:
                     groq_messages.append({"role": m["role"], "content": m["content"]})
             groq_messages.append({"role": "user", "content": raw_message})
 
-        elif intent == "HISTORY_QUERY":
+        elif intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY"):
             system_instruction = (
-                f"You are RecallOps. The user is specifically asking about past repair history, evidence, or previous incidents for their {active_eq_name}.\n\n"
-                "INSTRUCTIONS:\n"
-                "- In 2 to 3 concise points or short sentences, summarize what past repair records in episodic memory show for this equipment.\n"
-                "- Reference the specific machine ID (e.g. M-112, EQ-FIELD) and state whether the repair succeeded or was unsuccessful.\n"
-                "- If no historical records exist in memory for this equipment, state honestly that no previous repair episodes were found.\n"
-                "- NEVER fabricate false machine IDs, dates, or outcomes.\n"
-                "- Do NOT repeat the four troubleshooting section headers.\n"
-                "- Keep response under 90 words."
+                f"You are RecallOps — an AI assistant learning from verified equipment repair experiences.\n"
+                f"The user is asking a historical memory question about past repair records or previous incidents for their {active_eq_name}.\n\n"
+                "STRICT INSTRUCTIONS:\n"
+                "- Directly answer the historical-memory question in 2 to 4 concise sentences (under 85 words).\n"
+                "- State what past repair records in episodic memory show for this equipment and symptom pattern.\n"
+                "- Explicitly distinguish what worked (successful repairs) from what failed (unsuccessful actions), citing the specific machine ID, the exact repair action taken, and the recorded outcome.\n"
+                "- If no prior repair history exists for this equipment in memory, state plainly and honestly that no previous repair records were found.\n"
+                "- NEVER invent or hallucinate machine IDs, repair actions, dates, or verification evidence.\n"
+                "- Do NOT generate 'Plausible Causes', 'Safety Alert', 'Relevant Memory Insight', or 'Question for Technician' sections.\n"
+                "- Keep the response direct, natural, and helpful."
             )
             groq_messages = [{"role": "system", "content": system_instruction}]
             for m in conversation_history[-6:]:
                 if m["role"] in ("user", "assistant"):
                     groq_messages.append({"role": m["role"], "content": m["content"]})
-            groq_messages.append({"role": "user", "content": f"USER INQUIRY ABOUT PAST REPAIR HISTORY: \"{raw_message}\"\n\n{precedent_text}\nProvide your concise response referencing verified memory."})
+            groq_messages.append({"role": "user", "content": f"USER HISTORICAL MEMORY QUESTION: \"{raw_message}\"\n\n{precedent_text}\nAnswer the historical-memory question directly in 2 to 4 concise sentences distinguishing successful and unsuccessful precedents above."})
 
         elif intent == "REPORT_OUTCOME":
             system_instruction = (
@@ -898,7 +942,13 @@ class ChatService:
                 "Can you explain that more simply?",
                 "What if the technician finds no electrical faults?",
             ]
-        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL", "HISTORY_QUERY"):
+        elif intent in ("HISTORICAL_MEMORY_QUERY", "HISTORY_QUERY"):
+            suggested_followups = [
+                "What specific questions should I ask my technician?",
+                "Can you explain that in simpler words?",
+                "Which replacement parts were used?",
+            ]
+        elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_GENERAL"):
             suggested_followups = [
                 "What specific questions should I ask my technician?",
                 "Can you explain in simpler words?",
