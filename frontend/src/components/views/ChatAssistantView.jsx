@@ -450,20 +450,27 @@ export default function ChatAssistantView({
                                     </span>
                                   </div>
 
-                                  <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
-                                      isSuccess
-                                        ? "bg-emerald-950 text-emerald-400 border border-emerald-800/80"
-                                        : "bg-amber-950 text-amber-300 border border-amber-800/80"
-                                    }`}
-                                  >
-                                    {isSuccess ? (
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-amber-400" />
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {p.verification_status && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                                        {p.verification_status.replace(/_/g, " ")}
+                                      </span>
                                     )}
-                                    {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
-                                  </span>
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                        isSuccess
+                                          ? "bg-emerald-950 text-emerald-400 border border-emerald-800/80"
+                                          : "bg-amber-950 text-amber-300 border border-amber-800/80"
+                                      }`}
+                                    >
+                                      {isSuccess ? (
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      ) : (
+                                        <XCircle className="w-3 h-3 text-amber-400" />
+                                      )}
+                                      {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {/* Relevance explanation */}
@@ -511,7 +518,12 @@ export default function ChatAssistantView({
                             {outcomeToRecord.outcome_status}
                           </span>
                         </div>
-                        <p className="text-slate-300 mb-2.5 text-[11px]">
+                        <div className="mb-2 space-y-0.5 text-[11px] text-slate-300">
+                          <p><strong className="text-slate-200">Equipment:</strong> {outcomeToRecord.equipment_type}</p>
+                          <p><strong className="text-slate-200">Action:</strong> {outcomeToRecord.action_taken}</p>
+                          <p><strong className="text-slate-200">Verification:</strong> {outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "USER REPORTED"}</p>
+                        </div>
+                        <p className="text-slate-400 mb-2.5 text-[11px]">
                           Would you like to store this verified resolution in RecallOps permanent memory for future fleet diagnostics?
                         </p>
                         {isOutcomeSaved ? (
