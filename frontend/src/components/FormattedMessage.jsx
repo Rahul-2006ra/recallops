@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, Wrench, ShieldAlert, Sparkles, HelpCircle } from "lucide-react";
+import { Wrench, ShieldAlert, Sparkles, HelpCircle } from "lucide-react";
 
 /**
  * Parses inline formatting like **bold**, *italic*, and `code` safely into React nodes.
@@ -51,12 +51,11 @@ function parseInline(text) {
 
 /**
  * FormattedMessage parses assistant messages into clean, readable structured UI blocks.
- * Avoids any raw markdown asterisks and presents comfortable typography and spacing.
+ * Avoids raw markdown asterisks and presents comfortable typography and spacing.
  */
 export default function FormattedMessage({ content }) {
   if (!content) return null;
 
-  // Split content by paragraphs or lines
   const lines = content.split("\n");
   const blocks = [];
   let currentList = [];
@@ -128,16 +127,16 @@ export default function FormattedMessage({ content }) {
   flushList();
 
   return (
-    <div className="space-y-3 text-slate-200 text-[14px] leading-relaxed">
+    <div className="space-y-3 text-slate-200 text-[13.5px] leading-relaxed">
       {blocks.map((block, idx) => {
         if (block.type === "heading") {
           if (block.sectionType === "causes") {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400 pt-2 pb-0.5"
               >
-                <Wrench className="w-3.5 h-3.5" />
+                <Wrench className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{block.text}</span>
               </div>
             );
@@ -146,9 +145,9 @@ export default function FormattedMessage({ content }) {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400 pt-2 pb-0.5"
               >
-                <ShieldAlert className="w-3.5 h-3.5" />
+                <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{block.text}</span>
               </div>
             );
@@ -157,9 +156,9 @@ export default function FormattedMessage({ content }) {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-400 pt-2 pb-0.5"
               >
-                <HelpCircle className="w-3.5 h-3.5" />
+                <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{block.text}</span>
               </div>
             );
@@ -168,9 +167,9 @@ export default function FormattedMessage({ content }) {
             return (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-400 mt-3 mb-1"
+                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-400 pt-2 pb-0.5"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{block.text}</span>
               </div>
             );
@@ -178,7 +177,7 @@ export default function FormattedMessage({ content }) {
           return (
             <h4
               key={idx}
-              className="text-xs font-bold uppercase tracking-wider text-slate-300 mt-3 mb-1"
+              className="text-xs font-semibold uppercase tracking-wider text-slate-300 pt-2 pb-0.5"
             >
               {block.text}
             </h4>
@@ -187,11 +186,11 @@ export default function FormattedMessage({ content }) {
 
         if (block.type === "list") {
           return (
-            <ul key={idx} className="space-y-2 my-2">
+            <ul key={idx} className="space-y-1.5 my-1.5">
               {block.items.map((item, itemIdx) => (
                 <li key={itemIdx} className="flex items-start gap-2.5 text-slate-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0 mt-2"></span>
-                  <div className="flex-1 leading-normal">{parseInline(item)}</div>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-2"></span>
+                  <div className="flex-1 leading-relaxed">{parseInline(item)}</div>
                 </li>
               ))}
             </ul>

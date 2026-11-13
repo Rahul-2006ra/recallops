@@ -158,7 +158,8 @@ export async function recordOutcome(data) {
 
 export async function listMemories(params = {}) {
   const query = new URLSearchParams();
-  if (params.q) query.append("q", params.q);
+  const searchQ = params.q || params.query;
+  if (searchQ) query.append("q", searchQ);
   if (params.equipment_type) query.append("equipment_type", params.equipment_type);
   if (params.outcome_status) query.append("outcome_status", params.outcome_status);
   if (params.limit) query.append("limit", params.limit);
@@ -166,6 +167,7 @@ export async function listMemories(params = {}) {
   const res = await fetch(url);
   return handleResponse(res);
 }
+export const searchMemories = listMemories;
 
 export async function getMemoryDetails(memoryId) {
   const res = await fetch(`${API_BASE}/api/memories/${encodeURIComponent(memoryId)}`);

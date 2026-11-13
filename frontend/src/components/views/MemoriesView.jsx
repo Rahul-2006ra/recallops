@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  Search,
   Database,
+  Search,
+  Filter,
   CheckCircle2,
   XCircle,
-  Filter,
-  Wrench,
-  Clock,
   ExternalLink,
+  Shield,
+  Sparkles,
+  RefreshCw,
+  Tag,
+  Clock,
+  Layers,
   X,
   ShieldCheck,
-  Tag,
-  RefreshCw,
-  Sparkles,
-  Shield,
-  Layers,
+  Check,
 } from "lucide-react";
-import { listMemories } from "../../services/api";
+import { searchMemories, checkHealth } from "../../services/api";
 
 export default function MemoriesView({ mockMemoryMode, showToast }) {
   const [memories, setMemories] = useState([]);
@@ -25,27 +25,39 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
   const [outcomeFilter, setOutcomeFilter] = useState("ALL");
   const [selectedMemory, setSelectedMemory] = useState(null);
 
-  const fetchMemories = async () => {
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setSelectedMemory(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const fetchMemories = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = {};
-      if (searchQuery.trim()) params.q = searchQuery.trim();
-      if (outcomeFilter !== "ALL") params.outcome_status = outcomeFilter;
-      params.limit = 50;
-
-      const data = await listMemories(params);
-      setMemories(data.memories || []);
+      const data = await searchMemories({
+        query: searchQuery || undefined,
+        outcome_status: outcomeFilter !== "ALL" ? outcomeFilter : undefined,
+        mock_memory: mockMemoryMode,
+        limit: 50,
+      });
+      const items = Array.isArray(data) ? data : (data?.memories || []);
+      setMemories(items);
     } catch (err) {
-      console.error("Failed to load memories:", err);
-      showToast?.("Failed to retrieve episodic memory records.", "error");
+      console.error("Failed to load episodic memories:", err);
+      showToast?.("Failed to fetch memories from bank.", "error");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [searchQuery, outcomeFilter, mockMemoryMode, showToast]);
 
   useEffect(() => {
     fetchMemories();
-  }, [outcomeFilter]);
+  }, [fetchMemories]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -54,11 +66,11 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 overflow-y-auto">
-      {/* View Header */}
+      {/* Header Section */}
       <div className="px-6 py-6 border-b border-slate-800 bg-slate-900/40">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                 <Database className="w-4 h-4" />
               </div>
@@ -66,7 +78,7 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
                 My Memories Library
               </h1>
               {mockMemoryMode ? (
-                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-800 flex items-center gap-1.5">
+                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800 flex items-center gap-1.5">
                   <Shield className="w-3 h-3 text-emerald-400" />
                   <span>Sample Memory (Demo Mode)</span>
                 </span>
@@ -85,7 +97,8 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
           <button
             onClick={fetchMemories}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition self-start md:self-auto border border-slate-700/60"
+            aria-label="Refresh memory bank"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-medium text-slate-200 transition self-start md:self-auto border border-slate-700/60 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
             <span>Refresh Bank</span>
@@ -103,12 +116,13 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by equipment, symptom, or repair action..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner"
+              aria-label="Search memories"
+              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus-visible:ring-1 focus-visible:ring-emerald-500/30 transition shadow-inner"
             />
           </form>
 
           {/* Outcome Filter Chips */}
-          <div className="flex items-center gap-1.5 w-full md:w-auto">
+          <div className="flex items-center gap-1.5 w-full md:w-auto" role="group" aria-label="Outcome Filter">
             <span className="text-xs text-slate-400 flex items-center gap-1 mr-1">
               <Filter className="w-3 h-3 text-slate-500" />
               Outcome:
@@ -117,7 +131,8 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
               <button
                 key={status}
                 onClick={() => setOutcomeFilter(status)}
-                className={`text-xs px-3 py-1 rounded-lg transition font-medium ${
+                aria-pressed={outcomeFilter === status}
+                className={`text-xs px-3 py-1 rounded-lg transition font-medium focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                   outcomeFilter === status
                     ? status === "SUCCESSFUL"
                       ? "bg-emerald-600 text-white shadow-sm shadow-emerald-950/40"
@@ -162,7 +177,16 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
                   <div
                     key={mem.id}
                     onClick={() => setSelectedMemory(mem)}
-                    className={`p-4 rounded-xl bg-slate-900/60 border border-slate-800 transition cursor-pointer flex flex-col justify-between group ${
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`View details for ${mem.equipment_type} ${mem.machine_id}`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedMemory(mem);
+                      }
+                    }}
+                    className={`p-4 rounded-xl bg-slate-900/60 border border-slate-800 transition cursor-pointer flex flex-col justify-between group focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                       isSuccess ? "hover:border-emerald-500/40" : "hover:border-rose-500/40"
                     }`}
                   >
@@ -180,8 +204,8 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
                         <span
                           className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex items-center gap-1 ${
                             isSuccess
-                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800/80"
-                              : "bg-rose-950 text-rose-400 border border-rose-800/80"
+                              ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/80"
+                              : "bg-rose-950/80 text-rose-400 border border-rose-800/80"
                           }`}
                         >
                           {isSuccess ? (
@@ -228,20 +252,29 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
         </div>
       </div>
 
-      {/* Full Record Modal */}
+      {/* Full Record Modal with Accessible Dialog Semantics */}
       {selectedMemory && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedMemory(null);
+          }}
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative text-slate-100">
             <button
               onClick={() => setSelectedMemory(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              aria-label="Close details modal"
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-semibold text-base text-slate-100">
+              <h3 id="modal-title" className="font-semibold text-base text-slate-100">
                 Verified Episodic Record
               </h3>
             </div>
@@ -309,7 +342,8 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setSelectedMemory(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition"
+                aria-label="Close modal"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
               >
                 Close
               </button>

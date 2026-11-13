@@ -97,7 +97,8 @@ export default function SettingsView({
 
               <button
                 onClick={handleToggleMock}
-                className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition self-start sm:self-auto shadow-sm"
+                aria-label={`Toggle credit conservation mode. Currently ${mockMemoryMode ? "active" : "disabled"}`}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition self-start sm:self-auto shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                 style={{
                   backgroundColor: mockMemoryMode ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
                   borderColor: mockMemoryMode ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)",

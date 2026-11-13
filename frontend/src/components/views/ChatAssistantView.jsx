@@ -14,11 +14,13 @@ import {
   AlertTriangle,
   RotateCcw,
   Check,
-  Bookmark,
   Tag,
-  Info,
   ShieldCheck,
-  Layers,
+  ChevronDown,
+  ChevronUp,
+  Activity,
+  Flame,
+  Laptop,
 } from "lucide-react";
 import { sendChatMessage, recordOutcome, getConversation } from "../../services/api";
 import FormattedMessage from "../FormattedMessage";
@@ -28,21 +30,25 @@ const EXAMPLE_PROMPTS = [
     title: "Industrial Slurry Pump",
     desc: "Vibrating and overheating under load",
     prompt: "My industrial pump is vibrating and overheating.",
+    icon: Wrench,
   },
   {
     title: "Electric Induction Motor",
     desc: "Making an unusual humming noise",
     prompt: "My electric motor is making an unusual noise.",
+    icon: Activity,
   },
   {
     title: "Commercial Convection Oven",
     desc: "Keeps switching off mid-cycle",
     prompt: "My oven keeps switching off.",
+    icon: Flame,
   },
   {
     title: "Workstation Laptop",
     desc: "Cooling fan is unusually loud and spinning fast",
     prompt: "My laptop fan is unusually loud.",
+    icon: Laptop,
   },
 ];
 
@@ -59,10 +65,15 @@ export default function ChatAssistantView({
   const [speechSupported, setSpeechSupported] = useState(true);
   const [savingOutcomeId, setSavingOutcomeId] = useState(null);
   const [savedOutcomes, setSavedOutcomes] = useState({});
+  const [expandedPrecedents, setExpandedPrecedents] = useState({});
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+
+  const toggleExpandPrecedent = (cardKey) => {
+    setExpandedPrecedents((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
+  };
 
   // Initialize Speech-to-Text if supported by browser
   useEffect(() => {
@@ -143,7 +154,7 @@ export default function ChatAssistantView({
         setMessages(formatted);
       })
       .catch((err) => {
-        console.warn("Failed to load conversation history:", err);
+        console.warn("Failed to load conversation details:", err);
       });
 
     return () => {
@@ -151,20 +162,14 @@ export default function ChatAssistantView({
     };
   }, [activeConversationId]);
 
-  // Auto-scroll to bottom of chat
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Auto-scroll to bottom on new message
   useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   const toggleRecording = () => {
     if (!speechSupported) {
-      showToast?.("Speech-to-text is not supported in this browser. Please type your message.", "info");
+      showToast?.("Voice speech recognition is not supported in this browser.", "warning");
       return;
     }
 
@@ -234,21 +239,19 @@ export default function ChatAssistantView({
 
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
-      console.error("Failed to send message:", err);
-      showToast?.(err.message || "Troubleshooting assistant is temporarily unavailable.", "error");
-
+      console.error("Chat message error:", err);
       const errorMsg = {
         id: `err-${Date.now()}`,
         role: "assistant",
         content:
-          "I encountered an error connecting to the reasoning service. Please check your connection or try asking your question again in simpler terms.",
-        metadata: { isError: true },
+          "RecallOps experienced a temporary connectivity issue while processing your message. Your previous diagnosis remains saved in local storage. Please try again or rephrase your problem.",
+        metadata: {},
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
+      showToast?.("Failed to send message. Please retry.", "error");
     } finally {
       setIsLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 
@@ -260,42 +263,49 @@ export default function ChatAssistantView({
   };
 
   const handleConfirmSaveOutcome = async (msgId, outcomeData) => {
+    if (!outcomeData || savingOutcomeId) return;
+
     setSavingOutcomeId(msgId);
     try {
-      const result = await recordOutcome({
-        equipment_type: outcomeData.equipment_type || "Industrial Equipment",
-        symptoms: outcomeData.symptoms || "Reported equipment issue from session",
-        action_taken: outcomeData.action_taken || "Field repair verified",
-        outcome_status: outcomeData.outcome_status || "SUCCESSFUL",
-        machine_id: "EQ-FIELD",
+      const payload = {
+        equipment_type: outcomeData.equipment_type,
+        symptoms: outcomeData.symptoms,
+        action_taken: outcomeData.action_taken,
+        outcome_status: outcomeData.outcome_status,
+        verification_status: outcomeData.verification_status,
+        verification_source: outcomeData.verification_source,
+        machine_id: outcomeData.machine_id,
+        technician_notes: outcomeData.technician_notes,
         conversation_id: activeConversationId || undefined,
-        live_retain: !mockMemoryMode, // Guarded: only live if mock mode is turned off
-        idempotency_key: outcomeData.idempotency_key || `IDEMP-${msgId}`,
-      });
+        message_id: msgId,
+        mock_memory: mockMemoryMode,
+      };
 
-      let statusMsg = "Saved to Local Plant Memory";
+      const result = await recordOutcome(payload);
+
+      let statusMsg = "Saved to Local Memory (SQLite)";
       if (result.sync_status === "synced") {
-        statusMsg = "Saved locally & synced to Hindsight Cloud";
+        statusMsg = "Saved & Synced to Hindsight Cloud";
       } else if (result.sync_status === "sync_failed") {
-        statusMsg = "Saved locally (Cloud sync failed)";
-      } else {
-        statusMsg = "Saved to Local Episodic Memory (Demo Mode)";
+        statusMsg = "Saved to Local (Cloud Sync Pending)";
+      } else if (result.is_duplicate) {
+        statusMsg = "Saved to Local Memory (Cached Record)";
       }
 
       setSavedOutcomes((prev) => ({
         ...prev,
-        [msgId]: `${statusMsg} (${result.document_id || "RECORDED"})`,
+        [msgId]: statusMsg,
       }));
 
       showToast?.(
         result.is_duplicate
-          ? "Repair outcome previously confirmed (idempotent)."
-          : "Repair experience recorded successfully!",
+          ? "Outcome already saved in memory. Record updated."
+          : `Repair outcome stored successfully! (${statusMsg})`,
         "success"
       );
     } catch (err) {
-      console.error("Failed to save outcome:", err);
-      showToast?.(err.message || "Failed to record repair outcome.", "error");
+      console.error("Failed to record outcome:", err);
+      showToast?.("Failed to record outcome to memory.", "error");
     } finally {
       setSavingOutcomeId(null);
     }
@@ -305,32 +315,34 @@ export default function ChatAssistantView({
     setActiveConversationId(null);
     setMessages([]);
     setInputValue("");
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setSavedOutcomes({});
   };
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 relative">
-      {/* Top Header Bar (Shown when in active conversation) */}
+      {/* Active Conversation Sticky Header */}
       {messages.length > 0 && (
-        <div className="px-4 md:px-8 py-3.5 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md flex items-center justify-between z-10 transition-all">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-xs md:text-sm text-slate-100 flex items-center gap-1.5">
-                <span>RecallOps Troubleshooting Assistant</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              </h1>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
-                Conversational diagnostic intelligence grounded in verified past repairs
-              </p>
-            </div>
+        <div className="px-4 md:px-8 py-3 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md flex items-center justify-between text-xs text-slate-400 z-10">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span className="font-medium text-slate-200">
+              Active Troubleshooting Session
+            </span>
+            {mockMemoryMode ? (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400">
+                Local Sandbox
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                Hindsight Cloud Live
+              </span>
+            )}
           </div>
 
           <button
             onClick={resetToNewChat}
-            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition shadow-sm"
+            aria-label="Start new chat"
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
             title="Start New Chat"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -347,8 +359,8 @@ export default function ChatAssistantView({
           /* ========================================================================= */
           <div className="max-w-2xl mx-auto min-h-[75vh] flex flex-col justify-center items-center text-center space-y-7 py-6">
             {/* Elegant Icon Badge */}
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500/20 via-emerald-400/10 to-transparent border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/40">
-              <Sparkles className="w-7 h-7" />
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-lg shadow-emerald-950/30">
+              <Sparkles className="w-6 h-6" />
             </div>
 
             {/* Headline and Subtitle */}
@@ -362,7 +374,7 @@ export default function ChatAssistantView({
             </div>
 
             {/* Prominent Center Chat Composer */}
-            <div className="w-full relative shadow-2xl shadow-emerald-950/30">
+            <div className="w-full relative shadow-2xl shadow-emerald-950/20">
               {isRecording && (
                 <div className="mb-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-800/80 text-red-300 text-xs flex items-center justify-between animate-pulse">
                   <span className="flex items-center gap-2">
@@ -371,6 +383,7 @@ export default function ChatAssistantView({
                   </span>
                   <button
                     onClick={toggleRecording}
+                    aria-label="Stop recording"
                     className="underline text-[11px] text-red-200 hover:text-white"
                   >
                     Stop
@@ -378,7 +391,7 @@ export default function ChatAssistantView({
                 </div>
               )}
 
-              <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-1.5">
+              <div className="relative flex items-center bg-slate-900/80 rounded-2xl border border-slate-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all duration-150 p-1.5">
                 <textarea
                   ref={inputRef}
                   rows={2}
@@ -393,7 +406,8 @@ export default function ChatAssistantView({
                   <button
                     type="button"
                     onClick={toggleRecording}
-                    className={`p-2 rounded-xl transition ${
+                    aria-label={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                    className={`p-2 rounded-xl transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                       isRecording
                         ? "bg-red-600 text-white animate-pulse"
                         : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
@@ -407,7 +421,8 @@ export default function ChatAssistantView({
                     type="button"
                     onClick={() => handleSendMessage()}
                     disabled={!inputValue.trim() || isLoading}
-                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40"
+                    aria-label="Send message"
+                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors duration-150 disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                     title="Send message"
                   >
                     <Send className="w-4 h-4" />
@@ -422,23 +437,28 @@ export default function ChatAssistantView({
                 Suggested Scenarios
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                {EXAMPLE_PROMPTS.map((ex, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(ex.prompt)}
-                    className="p-3.5 rounded-xl bg-slate-900/50 hover:bg-slate-850/80 border border-slate-800/80 hover:border-emerald-500/40 transition group flex flex-col justify-between"
-                  >
-                    <div className="flex items-center justify-between w-full mb-1">
-                      <span className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 transition">
-                        {ex.title}
-                      </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
-                    </div>
-                    <p className="text-[11.5px] text-slate-400 line-clamp-2">
-                      {ex.desc}
-                    </p>
-                  </button>
-                ))}
+                {EXAMPLE_PROMPTS.map((ex, idx) => {
+                  const Icon = ex.icon;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendMessage(ex.prompt)}
+                      aria-label={`Ask about ${ex.title}`}
+                      className="p-3.5 rounded-xl bg-slate-900/40 hover:bg-slate-850/70 border border-slate-800/80 hover:border-slate-700 transition-all duration-150 group flex flex-col justify-between focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
+                          <Icon className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                          {ex.title}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                      <p className="text-[11.5px] text-slate-400 line-clamp-2">
+                        {ex.desc}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -464,10 +484,10 @@ export default function ChatAssistantView({
                   }`}
                 >
                   <div
-                    className={`rounded-2xl px-5 py-4 max-w-[95%] md:max-w-[88%] text-[14px] leading-relaxed shadow-sm transition-all ${
+                    className={`rounded-2xl px-5 py-4 max-w-[95%] md:max-w-[88%] text-[13.5px] leading-relaxed shadow-sm transition-all ${
                       isUser
                         ? "bg-emerald-600 text-white rounded-br-sm shadow-emerald-950/30"
-                        : "bg-slate-900/85 text-slate-200 border border-slate-800/90 rounded-bl-sm"
+                        : "bg-slate-900/80 text-slate-200 border border-slate-800/80 rounded-bl-sm"
                     }`}
                   >
                     {/* User / Assistant Header */}
@@ -480,20 +500,25 @@ export default function ChatAssistantView({
                           RecallOps Agent
                         </span>
                       )}
-                      <span className="text-[10px] text-slate-400 ml-auto font-mono">
-                        {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {msg.created_at
+                          ? new Date(msg.created_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
                       </span>
                     </div>
 
-                    {/* Hazard Warning Alert Banner */}
+                    {/* Safety Hazard Warning */}
                     {hazard && !isUser && (
-                      <div className="mb-3.5 p-3 rounded-xl bg-rose-950/70 border border-rose-800/80 text-rose-200 text-xs flex items-start gap-2.5">
+                      <div className="mb-3.5 p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 text-xs flex items-start gap-2.5">
                         <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
                         <div>
                           <strong className="block font-semibold uppercase tracking-wider text-[11px] text-rose-300">
                             Critical Safety Protocol
                           </strong>
-                          <span className="leading-normal">{hazard}</span>
+                          <span className="leading-relaxed">{hazard}</span>
                         </div>
                       </div>
                     )}
@@ -523,81 +548,109 @@ export default function ChatAssistantView({
                         <div className="space-y-2">
                           {precedents.map((p, idx) => {
                             const isSuccess = p.outcome_status === "SUCCESSFUL";
+                            const cardKey = `${msg.id}-${idx}`;
+                            const isExpanded = !!expandedPrecedents[cardKey];
                             const displaySourceLabel =
                               p.source_label ||
                               (mockMemoryMode
                                 ? "Sample Memory (Demo Mode)"
-                                : "Hindsight Cloud (Live Verified)");
+                                : "Hindsight Cloud Live");
 
                             return (
                               <div
                                 key={idx}
-                                className={`p-3.5 rounded-xl border text-xs transition ${
-                                  isSuccess
-                                    ? "bg-slate-950/80 border-slate-800/90 hover:border-emerald-500/40"
-                                    : "bg-slate-950/80 border-slate-800/90 hover:border-amber-500/40"
-                                }`}
+                                className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/70 text-xs transition-colors duration-150"
                               >
-                                {/* Precedent Card Top Bar */}
-                                <div className="flex items-start justify-between gap-2 mb-1.5">
+                                {/* 1. Equipment & Reported Outcome Header */}
+                                <div className="flex items-start justify-between gap-2 mb-2 pb-1.5 border-b border-slate-900">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs font-bold text-slate-100">
-                                      {p.machine_id}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-medium px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                    <span className="text-slate-400 font-medium">Equipment:</span>
+                                    <span className="font-semibold text-slate-200">
                                       {p.equipment_type}
                                     </span>
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {p.verification_status && (
-                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                                        {p.verification_status.replace(/_/g, " ")}
-                                      </span>
-                                    )}
-                                    <span
-                                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
-                                        isSuccess
-                                          ? "bg-emerald-950 text-emerald-400 border border-emerald-800/80"
-                                          : "bg-amber-950 text-amber-300 border border-amber-800/80"
-                                      }`}
-                                    >
-                                      {isSuccess ? (
-                                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                      ) : (
-                                        <XCircle className="w-3 h-3 text-amber-400" />
-                                      )}
-                                      {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
+                                    <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                                      {p.machine_id}
                                     </span>
                                   </div>
-                                </div>
 
-                                {/* Relevance explanation */}
-                                {p.relevance_reason && (
-                                  <p className="text-[11px] text-teal-300 font-medium mb-1.5 flex items-center gap-1">
-                                    <Sparkles className="w-3 h-3 text-teal-400 flex-shrink-0" />
-                                    <span>{p.relevance_reason}</span>
-                                  </p>
-                                )}
-
-                                {/* Action details */}
-                                <div className="text-slate-300 text-[12px] leading-relaxed">
-                                  <strong className="text-slate-200">
-                                    {isSuccess ? "Resolution Action:" : "Attempted Action (Avoid Repeating):"}
-                                  </strong>{" "}
-                                  {p.action_taken}
-                                </div>
-
-                                {/* Card Footer Source Tag */}
-                                <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-                                  <span className="flex items-center gap-1">
-                                    <Tag className="w-3 h-3 text-slate-600" />
-                                    <span>{displaySourceLabel}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                      isSuccess
+                                        ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/60"
+                                        : "bg-amber-950/60 text-amber-300 border border-amber-800/60"
+                                    }`}
+                                  >
+                                    {isSuccess ? (
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                    ) : (
+                                      <XCircle className="w-3 h-3 text-amber-400" />
+                                    )}
+                                    {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
                                   </span>
-                                  {p.verified_at && (
-                                    <span>Recorded {p.verified_at}</span>
-                                  )}
                                 </div>
+
+                                {/* 2. Relevant Historical Symptoms */}
+                                <div className="text-[11.5px] text-slate-300 mb-1.5 flex items-start gap-1">
+                                  <span className="text-slate-400 font-medium flex-shrink-0">Relevant Symptoms:</span>
+                                  <span className="text-slate-300">
+                                    {p.symptoms || p.relevance_reason || "Reported anomalous condition"}
+                                  </span>
+                                </div>
+
+                                {/* 3. Repair Attempted */}
+                                <div className="text-[11.5px] text-slate-300 mb-2 flex items-start gap-1">
+                                  <span className="text-slate-400 font-medium flex-shrink-0">
+                                    {isSuccess ? "Resolution Action:" : "Attempted Action:"}
+                                  </span>
+                                  <span className="font-medium text-slate-200">
+                                    {p.action_taken}
+                                  </span>
+                                </div>
+
+                                {/* 4 & 5. Source, Verification Level & Progressive Disclosure */}
+                                <div className="pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex items-center gap-1">
+                                      <Tag className="w-3 h-3 text-slate-600" />
+                                      <span>
+                                        {p.verification_status?.replace(/_/g, " ") || "Operator Field Report"}
+                                      </span>
+                                    </span>
+                                    <span>•</span>
+                                    <span>{displaySourceLabel}</span>
+                                  </div>
+
+                                  <button
+                                    onClick={() => toggleExpandPrecedent(cardKey)}
+                                    aria-label="Toggle full record details"
+                                    className="flex items-center gap-0.5 text-slate-400 hover:text-emerald-400 transition-colors focus-visible:outline-none"
+                                  >
+                                    <span>{isExpanded ? "Less" : "Details"}</span>
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-3 h-3" />
+                                    ) : (
+                                      <ChevronDown className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Progressive Disclosure Expanded Panel */}
+                                {isExpanded && (
+                                  <div className="mt-2.5 pt-2 border-t border-slate-900/90 space-y-1.5 text-[11px] text-slate-400">
+                                    {p.relevance_reason && (
+                                      <div className="flex items-start gap-1 text-teal-300">
+                                        <Sparkles className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                        <span>Relevance: {p.relevance_reason}</span>
+                                      </div>
+                                    )}
+                                    {p.verified_at && (
+                                      <div>Recorded in plant history: {p.verified_at}</div>
+                                    )}
+                                    <div className="text-[10px] text-slate-500">
+                                      Storage: {mockMemoryMode ? "Local SQLite (Development Mode)" : "Hindsight Cloud Memory Bank (recallops-demo)"}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -613,11 +666,13 @@ export default function ChatAssistantView({
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             Confirmed Field Repair Outcome Detected
                           </span>
-                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                            outcomeToRecord.outcome_status === "SUCCESSFUL"
-                              ? "bg-emerald-950 text-emerald-300 border border-emerald-800/80"
-                              : "bg-amber-950 text-amber-300 border border-amber-800/80"
-                          }`}>
+                          <span
+                            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                              outcomeToRecord.outcome_status === "SUCCESSFUL"
+                                ? "bg-emerald-950 text-emerald-300 border border-emerald-800/80"
+                                : "bg-amber-950 text-amber-300 border border-amber-800/80"
+                            }`}
+                          >
                             {outcomeToRecord.outcome_status}
                           </span>
                         </div>
@@ -626,28 +681,41 @@ export default function ChatAssistantView({
                         <div className="mb-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-[11.5px] text-slate-300">
                           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
                             <span className="text-slate-400 font-medium">Equipment:</span>
-                            <span className="font-semibold text-slate-200">{outcomeToRecord.equipment_type}</span>
+                            <span className="font-semibold text-slate-200">
+                              {outcomeToRecord.equipment_type}
+                            </span>
                           </div>
                           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
                             <span className="text-slate-400 font-medium">Original Problem:</span>
-                            <span className="text-slate-200">{outcomeToRecord.symptoms || "Reported equipment issue from session"}</span>
+                            <span className="text-slate-200">
+                              {outcomeToRecord.symptoms || "Reported equipment issue from session"}
+                            </span>
                           </div>
                           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
                             <span className="text-slate-400 font-medium">Repair Performed:</span>
-                            <span className="text-slate-200 font-medium">{outcomeToRecord.action_taken}</span>
+                            <span className="text-slate-200 font-medium">
+                              {outcomeToRecord.action_taken}
+                            </span>
                           </div>
                           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5 border-b border-slate-800/60">
                             <span className="text-slate-400 font-medium">Outcome:</span>
-                            <span className={`font-semibold ${
-                              outcomeToRecord.outcome_status === "SUCCESSFUL" ? "text-emerald-400" : "text-amber-400"
-                            }`}>
+                            <span
+                              className={`font-semibold ${
+                                outcomeToRecord.outcome_status === "SUCCESSFUL"
+                                  ? "text-emerald-400"
+                                  : "text-amber-400"
+                              }`}
+                            >
                               {outcomeToRecord.outcome_status}
                             </span>
                           </div>
                           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 py-0.5">
                             <span className="text-slate-400 font-medium">Verification Source:</span>
                             <span className="text-slate-200 font-mono text-[10.5px]">
-                              {outcomeToRecord.verification_source || (outcomeToRecord.verification_status ? outcomeToRecord.verification_status.replace(/_/g, " ") : "Technician Field Report")}
+                              {outcomeToRecord.verification_source ||
+                                (outcomeToRecord.verification_status
+                                  ? outcomeToRecord.verification_status.replace(/_/g, " ")
+                                  : "Technician Field Report")}
                             </span>
                           </div>
                         </div>
@@ -665,7 +733,8 @@ export default function ChatAssistantView({
                           <button
                             onClick={() => handleConfirmSaveOutcome(msg.id, outcomeToRecord)}
                             disabled={savingOutcomeId === msg.id}
-                            className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-emerald-950/40"
+                            aria-label="Confirm & Store in Permanent Memory"
+                            className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                           >
                             {savingOutcomeId === msg.id ? (
                               <>
@@ -691,7 +760,8 @@ export default function ChatAssistantView({
                         <button
                           key={i}
                           onClick={() => handleSendMessage(f)}
-                          className="text-[11.5px] px-3 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 transition shadow-sm"
+                          aria-label={`Ask follow-up: ${f}`}
+                          className="text-[11.5px] px-3 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                         >
                           {f}
                         </button>
@@ -736,6 +806,7 @@ export default function ChatAssistantView({
                 </span>
                 <button
                   onClick={toggleRecording}
+                  aria-label="Stop recording"
                   className="underline text-[11px] text-red-200 hover:text-white"
                 >
                   Stop
@@ -743,7 +814,7 @@ export default function ChatAssistantView({
               </div>
             )}
 
-            <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/80 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all shadow-inner p-1">
+            <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-slate-800 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all shadow-inner p-1">
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -762,7 +833,8 @@ export default function ChatAssistantView({
                 <button
                   type="button"
                   onClick={toggleRecording}
-                  className={`p-2 rounded-xl transition ${
+                  aria-label={isRecording ? "Stop voice input" : "Speak equipment issue"}
+                  className={`p-2 rounded-xl transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none ${
                     isRecording
                       ? "bg-red-600 text-white animate-pulse"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
@@ -776,7 +848,8 @@ export default function ChatAssistantView({
                   type="button"
                   onClick={() => handleSendMessage()}
                   disabled={!inputValue.trim() || isLoading}
-                  className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40"
+                  aria-label="Send message"
+                  className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors duration-150 disabled:opacity-40 disabled:hover:bg-emerald-600 shadow-md shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                   title="Send message"
                 >
                   <Send className="w-4 h-4" />

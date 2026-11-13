@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Search,
   Bot,
-  Sparkles,
 } from "lucide-react";
 import { listConversations, deleteConversation } from "../../services/api";
 
@@ -82,7 +81,8 @@ export default function ConversationsHistoryView({
           <div className="flex items-center gap-2.5">
             <button
               onClick={onNewChat}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-sm shadow-emerald-950/40"
+              aria-label="Start new session"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition shadow-sm shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Session</span>
@@ -90,7 +90,8 @@ export default function ConversationsHistoryView({
             <button
               onClick={fetchConversations}
               disabled={isLoading}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 transition border border-slate-700/60"
+              aria-label="Refresh conversation history"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 transition border border-slate-700/60 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
               title="Refresh History"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -109,7 +110,8 @@ export default function ConversationsHistoryView({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search conversations by title or equipment problem..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner"
+              aria-label="Search conversation history"
+              className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/70 focus-visible:ring-1 focus-visible:ring-emerald-500/30 transition shadow-inner"
             />
           </div>
         </div>
@@ -136,7 +138,8 @@ export default function ConversationsHistoryView({
               </div>
               <button
                 onClick={onNewChat}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition inline-flex items-center gap-1.5 shadow-sm shadow-emerald-950/40"
+                aria-label="Start troubleshooting"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition inline-flex items-center gap-1.5 shadow-sm shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Start Troubleshooting</span>
@@ -148,7 +151,16 @@ export default function ConversationsHistoryView({
                 <div
                   key={conv.id}
                   onClick={() => onSelectConversation(conv.id)}
-                  className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900 transition cursor-pointer flex items-center justify-between group shadow-sm"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Resume conversation: ${conv.title || "Untitled"}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectConversation(conv.id);
+                    }
+                  }}
+                  className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900 transition cursor-pointer flex items-center justify-between group shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
                 >
                   <div className="space-y-1 pr-4 flex-1">
                     <div className="flex items-center gap-2">
@@ -159,15 +171,17 @@ export default function ConversationsHistoryView({
 
                     <div className="flex items-center gap-4 text-slate-500 text-xs font-mono">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        {conv.updated_at ? new Date(conv.updated_at).toLocaleDateString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }) : "Recent"}
+                        <Clock className="w-3.5 h-3.5" />
+                        {conv.created_at
+                          ? new Date(conv.created_at).toLocaleDateString([], {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : "Recent Session"}
                       </span>
-                      <span>ID: {conv.id ? conv.id.slice(0, 16) : ""}</span>
+                      <span>•</span>
+                      <span>ID: {conv.id ? conv.id.slice(0, 8) : "local"}</span>
                     </div>
                   </div>
 
@@ -175,18 +189,17 @@ export default function ConversationsHistoryView({
                     <button
                       onClick={(e) => handleDelete(e, conv.id)}
                       disabled={deletingId === conv.id}
-                      className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition"
+                      aria-label="Delete conversation"
+                      className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-rose-500/70 focus-visible:outline-none"
                       title="Delete conversation"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {deletingId === conv.id ? (
+                        <RefreshCw className="w-4 h-4 animate-spin text-rose-400" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
-                    <button
-                      onClick={() => onSelectConversation(conv.id)}
-                      className="p-2 rounded-lg text-slate-500 group-hover:text-emerald-400 group-hover:bg-slate-800 transition"
-                      title="Resume conversation"
-                    >
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                    </button>
+                    <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-emerald-400 group-hover:translate-x-1 transition" />
                   </div>
                 </div>
               ))}
