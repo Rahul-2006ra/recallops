@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from typing import Any, Optional
@@ -61,6 +62,7 @@ class GroqService:
     def __init__(self):
         self._client: Optional[Groq] = None
         self._http_client: Optional[httpx.Client] = None
+        self._rate_limited_cooldowns: dict[str, float] = {}
 
     def get_client(self) -> Groq:
         if self._client is None:
@@ -69,6 +71,65 @@ class GroqService:
             self._http_client = httpx.Client(verify=get_ssl_context(), timeout=8.0)
             self._client = Groq(api_key=settings.GROQ_API_KEY, http_client=self._http_client, max_retries=1, timeout=8.0)
         return self._client
+
+    def get_model_candidate_list(self) -> list[str]:
+        now = time.time()
+        self._rate_limited_cooldowns = {m: exp for m, exp in self._rate_limited_cooldowns.items() if exp > now}
+
+        candidates = [settings.GROQ_MODEL, "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+        seen = set()
+        active = []
+        cooldown = []
+        for c in candidates:
+            if c and c not in seen:
+                seen.add(c)
+                if c in self._rate_limited_cooldowns:
+                    cooldown.append(c)
+                else:
+                    active.append(c)
+        return active + cooldown
+
+    def create_chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.2,
+        max_tokens: int = 800,
+        response_format: Optional[dict[str, Any]] = None,
+    ) -> tuple[str, str]:
+        """
+        Execute chat completion with automatic model failover across accessible Groq models.
+        Returns (content, model_used).
+        """
+        client = self.get_client()
+        models = self.get_model_candidate_list()
+        last_exception = None
+
+        for model_name in models:
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": model_name,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                if response_format:
+                    kwargs["response_format"] = response_format
+
+                completion = client.chat.completions.create(**kwargs)
+                content = completion.choices[0].message.content or ""
+                if content.strip():
+                    return content, model_name
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "rate_limit" in err_str.lower():
+                    self._rate_limited_cooldowns[model_name] = time.time() + 180.0
+                logger.warning("Groq model '%s' failed (%s). Attempting failover...", model_name, err_str)
+                last_exception = e
+                continue
+
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("All Groq candidate models failed to return content.")
 
     def investigate_incident(
         self,
@@ -115,33 +176,82 @@ class GroqService:
 
         user_prompt += "Analyze this incident and output your diagnostic investigation strictly according to schema."
 
-        logger.info("Sending investigation request to Groq (%s)...", settings.GROQ_MODEL)
-        try:
-            completion = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "incident_investigation",
-                        "strict": True,
-                        "schema": INVESTIGATION_SCHEMA,
+        models = self.get_model_candidate_list()
+        for model_name in models:
+            try:
+                logger.info("Sending investigation request to Groq (%s)...", model_name)
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "incident_investigation",
+                            "strict": True,
+                            "schema": INVESTIGATION_SCHEMA,
+                        },
                     },
-                },
-                temperature=0.1,
-                max_tokens=3000,
-            )
+                    temperature=0.1,
+                    max_tokens=3000,
+                )
 
-            raw_content = completion.choices[0].message.content
-            parsed = json.loads(raw_content)
-            return parsed
-        except Exception as e:
-            logger.error("Groq investigation failed: %s. Using resilient schema fallback.", str(e))
-            eq_type = incident.get("equipment_type", "Equipment")
-            rel_incidents = [m.get("document_id", "DOC-REF") for m in historical_memories[:3]] if historical_memories else []
+                raw_content = completion.choices[0].message.content
+                parsed = json.loads(raw_content)
+                return parsed
+            except Exception as e:
+                logger.warning("Groq investigation model '%s' failed: %s. Trying candidate fallback...", model_name, str(e))
+                continue
+
+        logger.error("All Groq investigation models failed. Using resilient category-calibrated schema fallback.")
+        eq_type = incident.get("equipment_type", "Equipment")
+        eq_lower = eq_type.lower()
+        rel_incidents = [m.get("document_id", "DOC-REF") for m in historical_memories[:3]] if historical_memories else []
+
+        is_electronic = any(w in eq_lower for w in ["phone", "laptop", "pc", "speaker", "headphone", "audio", "camera", "tablet", "electronic", "drone"])
+        is_household = any(w in eq_lower for w in ["microwave", "stove", "oven", "fridge", "refrigerator", "kettle", "toaster", "blender", "iron", "heater", "dishwasher"])
+
+        if is_electronic:
+            return {
+                "diagnosis_hypothesis": f"Preliminary hypothesis for {eq_type}: Reported symptoms indicate power delivery failure, audio/signal interface misconfiguration, or firmware lockup.",
+                "confidence": 0.70,
+                "recommended_diagnostic_steps": [
+                    "Disconnect charging power and inspect cable connections for physical integrity.",
+                    "Verify audio level, mute status, and device pairing on connected source.",
+                    "Perform power-cycle reboot to clear temporary firmware state.",
+                ],
+                "relevant_historical_incidents": rel_incidents,
+                "supporting_evidence": [
+                    f"Reported symptoms correlate with standard electronic interface and power delivery failure modes for {eq_type}."
+                ],
+                "unsuccessful_previous_repairs": [],
+                "safety_warnings": [
+                    "Disconnect charging adapter from electrical source before inspecting ports or cables.",
+                    "Do not puncture lithium battery or expose electronic components to liquid.",
+                ],
+            }
+        elif is_household:
+            return {
+                "diagnosis_hypothesis": f"Preliminary hypothesis for {eq_type}: Operational symptoms suggest supply interruption, thermal cutoff trip, or control relay failure.",
+                "confidence": 0.70,
+                "recommended_diagnostic_steps": [
+                    "Unplug appliance from wall outlet or close fuel supply shut-off valve.",
+                    "Inspect power plug, supply line, and thermal safety cutoff sensors.",
+                    "Verify control settings and power source continuity.",
+                ],
+                "relevant_historical_incidents": rel_incidents,
+                "supporting_evidence": [
+                    f"Reported symptoms align with common appliance supply and thermal regulation issues for {eq_type}."
+                ],
+                "unsuccessful_previous_repairs": [],
+                "safety_warnings": [
+                    "Always unplug electrical appliance from the wall before removing access panels.",
+                    "Allow all heated elements and surfaces to cool completely before inspection.",
+                ],
+            }
+        else:
             return {
                 "diagnosis_hypothesis": f"Preliminary hypothesis for {eq_type}: Operating symptoms suggest bearing wear, mechanical misalignment, or thermal ventilation restriction.",
                 "confidence": 0.70,
@@ -172,3 +282,4 @@ class GroqService:
 
 
 groq_service = GroqService()
+

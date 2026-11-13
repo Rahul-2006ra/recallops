@@ -122,6 +122,24 @@ EQUIPMENT_KEYWORDS: dict[str, tuple[str, str]] = {
     "cable": ("Power / Data Cable", "electronic"),
     "socket": ("Electrical Socket", "household"),
     "switch": ("Electrical Switch", "household"),
+    # Audio, Video & Imaging Equipment
+    "bluetooth speaker": ("Bluetooth Speaker", "electronic"),
+    "smart speaker": ("Smart Speaker", "electronic"),
+    "speaker": ("Bluetooth Speaker", "electronic"),
+    "television": ("Television", "electronic"),
+    "smart tv": ("Television", "electronic"),
+    "tv screen": ("Television", "electronic"),
+    "tv": ("Television", "electronic"),
+    "monitor": ("Computer Monitor", "electronic"),
+    "display": ("Display Screen", "electronic"),
+    "dash camera": ("Dash Camera", "electronic"),
+    "dash cam": ("Dash Camera", "electronic"),
+    "dashcam": ("Dash Camera", "electronic"),
+    "camera": ("Camera", "electronic"),
+    "webcam": ("Webcam", "electronic"),
+    "projector": ("Digital Projector", "electronic"),
+    "router": ("Wi-Fi Router", "electronic"),
+    "modem": ("Network Modem", "electronic"),
 }
 
 
@@ -534,7 +552,10 @@ class ChatService:
         # Detect equipment directly in message
         detected_equipment = detect_equipment_entity(raw_message)
 
-        # 5b. Problem Explanation / Cause update in multi-turn (e.g., "cylinder got over", "battery died", "fuse blew")
+        # 5b. Problem Explanation, Realization, or Resolution in multi-turn
+        # E.g.: "cylinder got over", "battery died", "volume was muted on my phone",
+        # "hdmi cable was loose", "set timer instead of cook time", "emergency stop was pressed",
+        # "balance slider was all the way left", "switch off tha adapter ka bhai"
         cause_keywords = [
             "got over", "ran out", "is empty", "was empty", "empty cylinder", "cylinder empty",
             "gas empty", "empty gas", "gas over", "cylinder over", "khatam ho gaya", "khatam ho gayi",
@@ -543,18 +564,75 @@ class ChatService:
             "light chali gayi", "breaker tripped", "fuse blew", "fuse blown", "unplugged",
             "cord was unplugged", "plug came out", "wire was loose", "plug was loose",
             "water shut off", "tank empty", "tank is empty", "no fuel", "ran out of fuel",
-            "valve closed", "valve was shut", "regulator off", "switch off", "switch band tha"
+            "valve closed", "valve was shut", "regulator off", "switch was off", "switch is off", "switch band tha",
+            # Audio, volume & phone / device settings
+            "volume was muted", "volume is muted", "was muted", "is muted", "muted", "mute",
+            "on mute", "volume was down", "volume down", "volume at zero", "turned down", "silent mode",
+            "airplane mode", "do not disturb",
+            # Cable & connection
+            "loose cable", "loose hdmi", "cable was loose", "hdmi was loose", "hdmi cable was loose",
+            "cable loose", "hdmi loose", "not plugged in", "wasn't plugged in", "plugged it back",
+            "loosely connected", "disconnected cable", "loose wire", "wire loose",
+            # Settings, timers, modes
+            "timer instead of cook time", "set the timer", "timer was set", "wrong setting",
+            "wrong mode", "wrong input", "timer mode",
+            # Controls, Emergency Stop
+            "emergency stop", "e-stop", "emergency stop button", "accidentally pressed",
+            "stop button was pressed", "estop pressed", "operator pressed", "stop pressed",
+            # Audio sliders & balance
+            "balance slider", "audio balance", "sound balance", "slider was all the way",
+            "balance was left", "balance was right", "all the way to the left", "all the way to the right",
+            # Hinglish & colloquial
+            "switch off tha", "switch band tha", "adapter switch", "switch off tha adapter ka bhai",
+            "switch off tha bhai", "power button off tha", "arre switch off tha", "band tha", "off tha",
+            "chalu nahi tha", "on nahi tha", "bhool gaya tha"
+        ]
+
+        realization_cues = [
+            "i just realized", "just realized", "i realized", "i noticed", "turns out", "it turns out",
+            "found out", "it was just", "actually it was", "actually it", "looks like it was",
+            "my bad", "never mind", "oh wait", "wait bro", "yaa bro", "yeah bro", "bro wait",
+            "bro haha", "haha", "😂", "lol", "my mistake", "silly mistake"
         ]
 
         has_cause_indication = (
             any(phrase in lower for phrase in cause_keywords)
             or (
-                any(w in lower for w in ["cylinder", "gas", "battery", "plug", "cord", "breaker", "fuse", "power", "fuel", "tank", "valve"])
-                and any(w in lower for w in ["over", "empty", "dead", "died", "drained", "blown", "tripped", "loose", "unplugged", "off", "cut", "khatam", "finished", "ended"])
+                any(r in lower for r in realization_cues)
+                and (
+                    len(conversation_history) > 0
+                    or prev_equipment is not None
+                    or any(w in lower for w in [
+                        "phone", "volume", "mute", "cable", "hdmi", "timer", "stop", "button",
+                        "switch", "adapter", "slider", "setting", "cylinder", "gas", "battery",
+                        "plug", "power", "cord", "wire"
+                    ])
+                )
             )
             or (
-                any(lower.startswith(p) for p in ["it turns out", "turns out", "actually it", "the reason is", "reason is", "i found out", "looks like it was", "it was just", "yaa broo", "yeah bro", "bro "])
-                and any(w in lower for w in ["cylinder", "gas", "battery", "power", "plug", "wire", "switch", "fuel", "empty", "over", "dead", "off", "khatam"])
+                any(w in words for w in [
+                    "cylinder", "gas", "battery", "plug", "cord", "breaker", "fuse", "power",
+                    "fuel", "tank", "valve", "volume", "sound", "cable", "hdmi", "switch",
+                    "adapter", "slider", "timer", "stop"
+                ])
+                and any(w in words for w in [
+                    "over", "empty", "dead", "died", "drained", "blown", "tripped", "loose",
+                    "unplugged", "off", "cut", "khatam", "finished", "ended", "muted", "mute",
+                    "down", "pressed", "zero", "left", "right"
+                ])
+                and not any(w in words for w in ["switching", "switches", "shutting", "tripping"])
+            )
+            or (
+                any(lower.startswith(p) for p in [
+                    "it turns out", "turns out", "actually it", "the reason is", "reason is",
+                    "i found out", "looks like it was", "it was just", "yaa broo", "yeah bro",
+                    "bro ", "oh wait", "oh haha", "my bad", "never mind", "arre "
+                ])
+                and any(w in lower for w in [
+                    "cylinder", "gas", "battery", "power", "plug", "wire", "switch", "fuel",
+                    "empty", "over", "dead", "off", "khatam", "muted", "mute", "volume", "phone",
+                    "cable", "hdmi", "timer", "stop", "pressed", "adapter", "slider"
+                ])
             )
         )
 
@@ -562,6 +640,27 @@ class ChatService:
             has_cause_indication
             and (len(conversation_history) > 0 or prev_equipment is not None or detected_equipment is not None)
         )
+
+        # Topic switch detection: User deliberately transitions to a different equipment problem
+        is_topic_switch = bool(
+            prev_equipment
+            and detected_equipment
+            and detected_equipment["equipment_type"] != prev_equipment["equipment_type"]
+            and detected_equipment.get("matched_keyword") not in {
+                "phone", "smartphone", "cable", "wire", "switch", "socket", "battery", "charger", "cord", "button", "lock", "adapter"
+            }
+            and any(w in lower for w in ["now my", "also my", "other", "another", "keeps", "unexpectedly", "not working", "broken", "vibrating", "stopped", "stuck", "won't", "wont"])
+        )
+        if is_topic_switch:
+            is_explanation_or_cause = False
+
+        # Contextual entity preservation: In an active troubleshooting thread, auxiliary items
+        # (phone, smartphone, cable, wire, switch, socket, battery, charger, cord, button, adapter)
+        # mentioned during an explanation or follow-up do not replace the primary equipment being troubleshot.
+        if prev_equipment and not is_topic_switch:
+            auxiliary_keywords = {"phone", "smartphone", "cable", "wire", "switch", "socket", "battery", "charger", "cord", "button", "lock", "adapter"}
+            if is_explanation_or_cause or (detected_equipment and detected_equipment.get("matched_keyword") in auxiliary_keywords):
+                detected_equipment = prev_equipment
 
         # 1. Casual social conversation, chitchat & greetings
         # Strict context isolation: Zero memory calls, zero diagnostic boilerplate
@@ -761,7 +860,7 @@ class ChatService:
                 "pump", "motor", "compressor", "oven", "mixer", "fan", "laptop", "pc",
                 "umbrella", "window", "power bank", "bike", "bicycle", "door", "lock", "dishwasher",
                 "toaster", "kettle", "blender", "vacuum", "heater", "chiller", "boiler", "conveyor", "ac",
-                "stove", "cylinder"
+                "stove", "cylinder", "tv", "television", "speaker", "camera", "dashcam", "headphone", "headphones", "monitor"
             ])
             and len(conversation_history) == 0
         )
@@ -1189,10 +1288,7 @@ class ChatService:
             active_equipment = prev_equipment
             detected_equipment = prev_equipment
         elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
-            if prev_equipment and matched_equipment_current and "cylinder" in matched_equipment_current["equipment_type"].lower() and "stove" in prev_equipment["equipment_type"].lower():
-                active_equipment = prev_equipment
-            else:
-                active_equipment = prev_equipment or matched_equipment_current
+            active_equipment = prev_equipment or matched_equipment_current
             detected_equipment = active_equipment
             is_followup = True
         elif prev_equipment and is_followup_turn:
@@ -1639,16 +1735,14 @@ class ChatService:
             reply_text = direct_reply
         else:
             try:
-                client = groq_service.get_client()
-                completion = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
+                content, model_used = groq_service.create_chat_completion(
                     messages=groq_messages,
                     temperature=0.2,
                     max_tokens=800,
                 )
-                reply_text = completion.choices[0].message.content
+                reply_text = content
             except Exception as e:
-                logger.error("Groq chat inference error: %s", e)
+                logger.error("Groq chat inference error across models: %s", e)
                 # Calibrated structured fallback adhering to diagnostic response format
                 if intent in ("CASUAL_CONVERSATION", "CASUAL_GREETING"):
                     lower_r = raw_message.lower()
@@ -1723,7 +1817,7 @@ class ChatService:
                     )
                 elif intent in ("FOLLOWUP_TECHNICIAN_QUESTIONS",):
                     reply_text = (
-                        f"Here is what you can ask your technician: 'Could you measure the shaft alignment, verify bearing play, and inspect the cooling passages on this {active_eq_name}?'"
+                        f"Here is what you can ask your technician: 'Could you measure the operating tolerances, verify component connections, and inspect the cooling clearances on this {active_eq_name}?'"
                     )
                 elif intent == "PROBLEM_EXPLANATION_OR_CAUSE":
                     lower_r = raw_message.lower()
@@ -1733,6 +1827,36 @@ class ChatService:
                             "When replacing or connecting a new cylinder, ensure the regulator valve is turned completely off before detaching. "
                             "Once the new cylinder is securely fitted, check for proper sealing and ensure there is no smell of gas before attempting ignition—never use an open flame to check for leaks. "
                             "If you detect any gas odor, ventilate the area immediately and do not operate electrical switches."
+                        )
+                    elif any(k in lower_r for k in ["volume", "mute", "muted", "silent", "sound", "phone"]):
+                        reply_text = (
+                            f"That explains it! When the connected device's volume is muted or turned all the way down, the {active_eq_name} receives zero audio signal despite being connected. "
+                            "Unmuting the device and adjusting the playback volume should have your sound playing normally right away. Enjoy the music, and let me know if you need any other troubleshooting help!"
+                        )
+                    elif any(k in lower_r for k in ["cable", "hdmi", "wire", "connection", "loose"]):
+                        reply_text = (
+                            f"Glad you caught that! A loose HDMI or display cable prevents signal transmission to your {active_eq_name}. "
+                            "Reseating the cable firmly into both ports ensures solid contact and should restore your picture immediately."
+                        )
+                    elif any(k in lower_r for k in ["timer", "cook time", "setting", "mode"]):
+                        reply_text = (
+                            f"That definitely explains it! Setting the kitchen timer counts down without engaging the heating elements on your {active_eq_name}. "
+                            "Switching from timer mode to active cook time and setting the power level will heat your food right up."
+                        )
+                    elif any(k in lower_r for k in ["emergency stop", "e-stop", "stop button", "estop", "accidentally pressed", "stop pressed"]):
+                        reply_text = (
+                            f"That is a very common scenario on the shop floor. An engaged Emergency Stop button directly hard-isolates the power drive circuit on your {active_eq_name}. "
+                            "Twisting the E-Stop knob clockwise to unlatch it and pressing the reset button on your control console will restore drive power safely."
+                        )
+                    elif any(k in lower_r for k in ["balance", "slider", "left", "right", "one ear"]):
+                        reply_text = (
+                            f"Good catch! If the audio balance slider is shifted all the way to one channel in settings, it completely silences the opposite side of your {active_eq_name}. "
+                            "Centering the balance slider in your device's accessibility or audio settings will restore stereo sound to both ears."
+                        )
+                    elif any(k in lower_r for k in ["adapter", "switch off", "band tha", "off tha"]):
+                        reply_text = (
+                            f"Arey bilkul, that explains it! Adapter ka switch off hone ki wajah se {active_eq_name} ko power supply nahi mil rahi thi. "
+                            "Switch on karte hi adapter power deliver karega aur device normally chalne lagega. Let me know if everything powers up fine!"
                         )
                     elif any(k in lower_r for k in ["battery", "charge", "charger"]):
                         reply_text = (
@@ -1747,8 +1871,8 @@ class ChatService:
                     else:
                         reply_text = (
                             f"That explains why your {active_eq_name} was not functioning properly. "
-                            "Once this is replenished or restored, safely inspect the connections and test operation. "
-                            "Ensure all standard safety precautions are followed before restarting the equipment."
+                            "Now that you've identified this, safely verify the connection or setting and test operation. "
+                            "Let me know if the issue persists or if you need help with any other equipment!"
                         )
                 elif intent in ("FOLLOWUP_WHY_OR_HOW", "FOLLOWUP_EXPLANATION", "FOLLOWUP_QUESTION", "FOLLOWUP_GENERAL") or is_followup:
                     eq_lower = active_eq_name.lower()
@@ -1764,9 +1888,13 @@ class ChatService:
                         reply_text = (
                             f"The {active_eq_name} commonly stops when its overload protection switch trips, the motor carbon brushes wear out, or drive coupling friction causes a thermal shutdown."
                         )
+                    elif any(w in eq_lower for w in ["speaker", "headphone", "audio", "phone", "tv"]):
+                        reply_text = (
+                            f"Audio dropouts or silence on your {active_eq_name} typically occur when Bluetooth signal interference degrades the digital packet stream, the source volume is muted, or the power management circuit triggers battery preservation."
+                        )
                     else:
                         reply_text = (
-                            f"This behavior on your {active_eq_name} typically arises from mechanical component wear, thermal boundary limits, or protective sensor circuits isolating the power drive."
+                            f"This behavior on your {active_eq_name} typically arises from operational load variations, thermal safety cutoffs, or connection interface degradation."
                         )
                 elif intent == "TROUBLESHOOTING_QUERY":
                     top_mem_summary = ""
@@ -1783,25 +1911,55 @@ class ChatService:
                     else:
                         top_mem_summary = "No historical repair records were found in memory for this issue."
 
-                    is_hh = active_equipment.get("category") in ("household", "electronic") if active_equipment else False
-                    safety_line = (
-                        "Unplug the appliance from the electrical outlet before inspecting filters or housings; never open live enclosures."
-                        if is_hh else
-                        "Perform full Lockout/Tagout (LOTO) at electrical disconnect and verify zero energy before physical inspection."
-                    )
+                    eq_cat = active_equipment.get("category", "") if active_equipment else ""
+                    eq_name_lower = active_eq_name.lower()
+                    is_electronic = eq_cat == "electronic" or any(w in eq_name_lower for w in [
+                        "phone", "speaker", "laptop", "pc", "headphone", "audio", "camera", "tablet", "drone", "bluetooth", "tv", "screen"
+                    ])
+                    is_household = eq_cat == "household" or any(w in eq_name_lower for w in [
+                        "microwave", "stove", "oven", "fridge", "refrigerator", "kettle", "toaster", "blender", "iron", "heater", "dishwasher", "fan"
+                    ])
 
-                    reply_text = (
-                        "Plausible Causes:\n"
-                        f"• Potential mechanical imbalance, misalignment, or bearing wear within the {active_eq_name}.\n"
-                        "• Blocked cooling passages, restricted airflow, or heat dissipation breakdown.\n"
-                        "• Loose mounting fasteners, coupling degradation, or excessive operational load.\n\n"
-                        "Safety Alert:\n"
-                        f"• {safety_line}\n\n"
-                        "Relevant Memory Insight:\n"
-                        f"• {top_mem_summary}\n\n"
-                        "Question for Technician:\n"
-                        f"• Could you check bearing runout, mechanical alignment, and cooling passage clearances on this {active_eq_name}?"
-                    )
+                    if is_electronic:
+                        reply_text = (
+                            "Plausible Causes:\n"
+                            f"• Audio level muted, Bluetooth pairing dropped, or input channel misconfigured on {active_eq_name}.\n"
+                            "• Depleted battery charge or damaged charging cable failing to deliver operating power.\n"
+                            "• Firmware lockup or internal audio amplifier circuit overload.\n\n"
+                            "Safety Alert:\n"
+                            "• Disconnect the device from charger before inspecting ports; never puncture or tamper with lithium battery cells.\n\n"
+                            "Relevant Memory Insight:\n"
+                            f"• {top_mem_summary}\n\n"
+                            "Question for Support / Technician:\n"
+                            f"• Could you test whether the Bluetooth radio module and power delivery circuit on this {active_eq_name} are operating at nominal voltage?"
+                        )
+                    elif is_household:
+                        reply_text = (
+                            "Plausible Causes:\n"
+                            f"• Interrupted electrical power, tripped thermal safety fuse, or faulty supply switch on {active_eq_name}.\n"
+                            "• Fuel supply shutoff, closed regulator valve, or line pressure starvation.\n"
+                            "• Control timer relay failure or worn heating element.\n\n"
+                            "Safety Alert:\n"
+                            "• Unplug the appliance from the electrical outlet or close fuel supply shut-off valve before physical inspection; never open live enclosures.\n\n"
+                            "Relevant Memory Insight:\n"
+                            f"• {top_mem_summary}\n\n"
+                            "Question for Technician:\n"
+                            f"• Could you check the continuity of the thermal fuse, door switch, and main control relay on this {active_eq_name}?"
+                        )
+                    else:
+                        safety_line = "Perform full Lockout/Tagout (LOTO) at electrical disconnect and verify zero energy before physical inspection."
+                        reply_text = (
+                            "Plausible Causes:\n"
+                            f"• Potential mechanical imbalance, misalignment, or bearing wear within the {active_eq_name}.\n"
+                            "• Blocked cooling passages, restricted airflow, or heat dissipation breakdown.\n"
+                            "• Loose mounting fasteners, coupling degradation, or excessive operational load.\n\n"
+                            "Safety Alert:\n"
+                            f"• {safety_line}\n\n"
+                            "Relevant Memory Insight:\n"
+                            f"• {top_mem_summary}\n\n"
+                            "Question for Technician:\n"
+                            f"• Could you check bearing runout, mechanical alignment, and cooling passage clearances on this {active_eq_name}?"
+                        )
                 else:
                     reply_text = (
                         "I am RecallOps, your equipment troubleshooting assistant. Please describe the equipment, appliance, or machine you'd like help diagnosing, along with the symptoms you're seeing."
