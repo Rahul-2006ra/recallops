@@ -20,6 +20,11 @@ import MachinesView from "./components/views/MachinesView";
 import ReportIncidentModal from "./components/modals/ReportIncidentModal";
 import RepairModal from "./components/modals/RepairModal";
 import VerifyOutcomeModal from "./components/modals/VerifyOutcomeModal";
+import AuthModal from "./components/modals/AuthModal";
+
+// Auth & Icons
+import { useAuth } from "./context/AuthContext";
+import { LogIn, Shield } from "lucide-react";
 
 // Backend API Client
 import {
@@ -42,6 +47,10 @@ const LEGACY_TABS = [
 ];
 
 export default function App() {
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState("signin");
+
   // RecallOps 2.0 Default Landing Experience: AI Assistant
   const [activeTab, setActiveTab] = useState("assistant");
   const [activeConversationId, setActiveConversationId] = useState(() => {
@@ -108,6 +117,15 @@ export default function App() {
   // Fetch all incidents
   const fetchAllIncidents = useCallback(
     async (preferredSelectId = null) => {
+      if (!isAuthenticated) {
+        setIncidents([]);
+        setSelectedIncident(null);
+        setIncidentDetails(null);
+        setIsLoadingIncidents(false);
+        return;
+      }
+
+      setIsLoadingIncidents(true);
       try {
         const data = await listIncidents();
         setIncidents(data);
@@ -125,6 +143,9 @@ export default function App() {
           }
           setSelectedIncident(toSelect);
           loadIncidentDetails(toSelect.id);
+        } else {
+          setSelectedIncident(null);
+          setIncidentDetails(null);
         }
       } catch (err) {
         console.error("Failed to fetch incidents:", err);
@@ -132,17 +153,21 @@ export default function App() {
         setIsLoadingIncidents(false);
       }
     },
-    [loadIncidentDetails]
+    [isAuthenticated, loadIncidentDetails]
   );
 
-  // Initial load
+  // System health check
   useEffect(() => {
     checkHealth()
       .then((h) => setSystemHealth(h))
       .catch(() => setSystemHealth({ status: "offline" }));
+  }, []);
 
+  // Sync incidents and reset active conversation when user changes
+  useEffect(() => {
+    setActiveConversationId(null);
     fetchAllIncidents();
-  }, [fetchAllIncidents]);
+  }, [user?.uid, isAuthenticated, fetchAllIncidents]);
 
   const handleSelectIncident = (incidentOrId) => {
     let incident = null;
@@ -305,7 +330,35 @@ export default function App() {
         onNewChat={handleNewChat}
         isLegacyMode={isLegacyMode}
         mockMemoryMode={mockMemoryMode}
+        onOpenAuthModal={(mode = "signin") => {
+          setAuthModalMode(mode);
+          setIsAuthModalOpen(true);
+        }}
       />
+
+      {/* Guest/Unauthenticated Security Notice Banner */}
+      {!isAuthenticated && !authLoading && (
+        <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-b border-emerald-800/40 px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-slate-300">
+              <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong className="text-white">Multi-User Security:</strong> Sign in with Google or Email for private conversation history, isolated memory bank, and incident logs.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setAuthModalMode("signin");
+                setIsAuthModalOpen(true);
+              }}
+              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In / Register</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main View Area */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
@@ -445,6 +498,12 @@ export default function App() {
         incident={modalTargetIncident}
         onClose={() => setIsVerifyModalOpen(false)}
         onSubmitSuccess={handleVerifySubmit}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
       />
     </div>
   );

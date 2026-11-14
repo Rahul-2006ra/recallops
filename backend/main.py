@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import init_db
@@ -41,6 +41,21 @@ app.add_middleware(
 # Register routers
 app.include_router(incidents_router)
 app.include_router(chat_router)
+
+
+from backend.auth import AuthenticatedUser, get_current_user
+
+
+@app.get("/api/auth/me", tags=["auth"])
+def get_auth_me(current_user: AuthenticatedUser = Depends(get_current_user)):
+    return {
+        "uid": current_user.uid,
+        "email": current_user.email,
+        "name": current_user.name,
+        "display_name": current_user.display_name,
+        "picture": current_user.picture,
+        "photo_url": current_user.photo_url,
+    }
 
 
 @app.get("/", tags=["system"])

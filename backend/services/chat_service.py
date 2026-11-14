@@ -330,30 +330,38 @@ class ChatService:
                 return "FIRE / THERMAL HAZARD: Turn off equipment power immediately. Have appropriate fire extinguisher on standby."
         return None
 
-    def create_conversation(self, title: Optional[str] = None) -> dict[str, Any]:
+    def create_conversation(self, title: Optional[str] = None, user_id: Optional[str] = None) -> dict[str, Any]:
         conv_id = generate_id("CONV")
         now_iso = datetime.now(timezone.utc).isoformat()
         final_title = title or "New Troubleshooting Session"
         with get_db() as conn:
             conn.execute(
-                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                (conv_id, final_title, now_iso, now_iso),
+                "INSERT INTO conversations (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (conv_id, user_id, final_title, now_iso, now_iso),
             )
-        return {"id": conv_id, "title": final_title, "created_at": now_iso, "updated_at": now_iso, "message_count": 0}
+        return {"id": conv_id, "title": final_title, "user_id": user_id, "created_at": now_iso, "updated_at": now_iso, "message_count": 0}
 
-    def list_conversations(self) -> list[ConversationResponse]:
+    def list_conversations(self, user_id: Optional[str] = None) -> list[ConversationResponse]:
         with get_db() as conn:
-            rows = conn.execute(
-                """
+            query = """
                 SELECT c.id, c.title, c.created_at, c.updated_at,
                        COUNT(m.id) as message_count,
                        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_preview
                 FROM conversations c
                 LEFT JOIN messages m ON c.id = m.conversation_id
+            """
+            params = []
+            if user_id:
+                query += " WHERE c.user_id = ?"
+                params.append(user_id)
+            else:
+                query += " WHERE c.user_id IS NULL"
+
+            query += """
                 GROUP BY c.id
                 ORDER BY c.updated_at DESC
-                """
-            ).fetchall()
+            """
+            rows = conn.execute(query, params).fetchall()
             return [
                 ConversationResponse(
                     id=row["id"],
@@ -366,14 +374,19 @@ class ChatService:
                 for row in rows
             ]
 
-    def get_conversation(self, conversation_id: str) -> Optional[ConversationDetailResponse]:
+    def get_conversation(self, conversation_id: str, user_id: Optional[str] = None) -> Optional[ConversationDetailResponse]:
         with get_db() as conn:
             conv = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?",
+                "SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE id = ?",
                 (conversation_id,),
             ).fetchone()
             if not conv:
                 return None
+            if user_id and conv["user_id"] and conv["user_id"] != user_id:
+                return None
+            if user_id and conv["user_id"] is None and user_id != "demo_user":
+                return None
+
             msg_rows = conn.execute(
                 "SELECT id, conversation_id, role, content, metadata, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
                 (conversation_id,),
@@ -399,9 +412,12 @@ class ChatService:
                 messages=messages,
             )
 
-    def delete_conversation(self, conversation_id: str) -> bool:
+    def delete_conversation(self, conversation_id: str, user_id: Optional[str] = None) -> bool:
         with get_db() as conn:
-            cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            if user_id:
+                cursor = conn.execute("DELETE FROM conversations WHERE id = ? AND user_id = ?", (conversation_id, user_id))
+            else:
+                cursor = conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
             return cursor.rowcount > 0
 
     def record_problem_episode(
@@ -1079,6 +1095,7 @@ class ChatService:
         equipment_type: Optional[str] = None,
         outcome_status: Optional[str] = None,
         limit: int = 15,
+        user_id: Optional[str] = None,
     ) -> list[MemoryItemResponse]:
         """Search verified outcomes from SQLite database with multi-symptom pattern relevance and deduplication."""
         lower_query = query.lower()
@@ -1098,8 +1115,8 @@ class ChatService:
         with get_db() as conn:
             sql = """
                 SELECT 
-                    v.id, v.incident_id, i.machine_id, i.equipment_type,
-                    i.symptoms, r.action_taken, r.parts_replaced,
+                    v.id, v.user_id as verification_user_id, v.incident_id, i.user_id as incident_user_id,
+                    i.machine_id, i.equipment_type, i.symptoms, r.action_taken, r.parts_replaced,
                     v.outcome_status, v.inspection_notes, v.verified_by,
                     v.verified_at, v.hindsight_retained, v.hindsight_document_id,
                     v.sync_status
@@ -1109,6 +1126,17 @@ class ChatService:
                 WHERE 1=1
             """
             params: list[Any] = []
+            if user_id:
+                if user_id == "demo_user":
+                    sql += " AND (v.user_id = ? OR i.user_id = ? OR i.is_demo = 1)"
+                    params.extend([user_id, user_id])
+                else:
+                    sql += " AND (v.user_id = ? OR i.user_id = ?)"
+                    params.extend([user_id, user_id])
+            else:
+                # If no user_id supplied, only match non-private demo records
+                sql += " AND (i.is_demo = 1 AND v.user_id IS NULL AND i.user_id IS NULL)"
+
             if equipment_type:
                 eq_lower = equipment_type.lower()
                 core_kw = "pump" if "pump" in eq_lower else "mixer" if "mixer" in eq_lower else "oven" if "oven" in eq_lower else "motor" if "motor" in eq_lower else "compressor" if "compressor" in eq_lower else "laptop" if "laptop" in eq_lower else eq_lower
@@ -1185,12 +1213,13 @@ class ChatService:
             )
         return results
 
-    def get_memory_by_id(self, memory_id: str) -> Optional[MemoryItemResponse]:
+    def get_memory_by_id(self, memory_id: str, user_id: Optional[str] = None) -> Optional[MemoryItemResponse]:
         with get_db() as conn:
             r = conn.execute(
                 """
                 SELECT 
-                    v.id, v.incident_id, i.machine_id, i.equipment_type,
+                    v.id, v.user_id as verification_user_id, v.incident_id, i.user_id as incident_user_id,
+                    i.machine_id, i.equipment_type, i.is_demo,
                     i.symptoms, r.action_taken, r.parts_replaced,
                     v.outcome_status, v.inspection_notes, v.verified_by,
                     v.verified_at, v.hindsight_retained, v.hindsight_document_id,
@@ -1205,6 +1234,13 @@ class ChatService:
             ).fetchone()
             if not r:
                 return None
+            if user_id:
+                owner = r["verification_user_id"] or r["incident_user_id"]
+                if owner and owner != user_id:
+                    return None
+                if owner is None and not r["is_demo"] and user_id != "demo_user":
+                    return None
+
             return MemoryItemResponse(
                 id=r["id"],
                 incident_id=r["incident_id"],
@@ -1227,15 +1263,16 @@ class ChatService:
         query: str,
         mock_mode: bool = True,
         equipment_type: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> list[PrecedentRecord]:
-        """Retrieve historical precedents with multi-symptom relevance ranking and outcome diversity."""
+        """Retrieve historical precedents with multi-symptom relevance ranking and outcome diversity under user isolation."""
         precedents: list[PrecedentRecord] = []
 
         # LIVE HINDSIGHT RECALL: only if mock_mode is explicitly False AND config permits
         if not mock_mode and not settings.HINDSIGHT_MOCK_MODE:
             try:
-                logger.info("Executing deliberate live Hindsight recall for: '%s'", query)
-                recalled = hindsight_service.recall_memories(query=query, budget="low", max_tokens=1024)
+                logger.info("Executing deliberate live Hindsight recall for: '%s' (user=%s)", query, user_id)
+                recalled = hindsight_service.recall_memories(query=query, budget="low", max_tokens=1024, user_id=user_id)
                 for item in recalled:
                     text = item.get("text", "")
                     doc_id = item.get("document_id") or "HINDSIGHT-DOC"
@@ -1294,7 +1331,7 @@ class ChatService:
                 logger.warning("Live Hindsight recall skipped/failed (%s); falling back cleanly to local memory.", e)
 
         # LOCAL SAMPLE / DEMO MEMORY RECALL (0 billable credits consumed)
-        local_results = self.search_local_memories(query=query, equipment_type=equipment_type, limit=8)
+        local_results = self.search_local_memories(query=query, equipment_type=equipment_type, limit=8, user_id=user_id)
 
         # Group and diversify: Select top SUCCESSFUL match + top UNSUCCESSFUL match (if relevant)
         successful_matches = [r for r in local_results if r.outcome_status == "SUCCESSFUL"]
@@ -1355,23 +1392,25 @@ class ChatService:
 
         return precedents[:2]
 
-    def process_chat(self, req: ChatRequest) -> ChatResponse:
-        """Handle conversational troubleshooting with Groq reasoning and Hindsight memory integration."""
+    def process_chat(self, req: ChatRequest, user_id: Optional[str] = None) -> ChatResponse:
+        """Handle conversational troubleshooting with Groq reasoning and Hindsight memory integration under user isolation."""
         raw_message = req.message.strip()
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # 1. Ensure conversation exists
+        # 1. Ensure conversation exists and belongs to the authenticated user
         conv_id = req.conversation_id
         if not conv_id:
-            # Auto-title based on first 30 chars of prompt
+            # Auto-title based on first 35 chars of prompt
             clean_title = (raw_message[:35] + "...") if len(raw_message) > 35 else raw_message
-            conv_data = self.create_conversation(title=clean_title)
+            conv_data = self.create_conversation(title=clean_title, user_id=user_id)
             conv_id = conv_data["id"]
         else:
             with get_db() as conn:
-                conv = conn.execute("SELECT id FROM conversations WHERE id = ?", (conv_id,)).fetchone()
-                if not conv:
-                    conv_data = self.create_conversation(title=raw_message[:35])
+                conv = conn.execute("SELECT id, user_id FROM conversations WHERE id = ?", (conv_id,)).fetchone()
+                if not conv or (user_id and conv["user_id"] and conv["user_id"] != user_id):
+                    # Conversation missing or owned by another user -> create new conversation for authenticated user
+                    clean_title = (raw_message[:35] + "...") if len(raw_message) > 35 else raw_message
+                    conv_data = self.create_conversation(title=clean_title, user_id=user_id)
                     conv_id = conv_data["id"]
 
         # 2. Retrieve Conversation History for Multi-Turn Continuity
@@ -1398,7 +1437,7 @@ class ChatService:
 
         # 3. Semantic Intent Classification & Entity Extraction (Executed FIRST)
         lower_msg = raw_message.lower().strip()
-        classification = self.classify_intent_and_entities(raw_message, conversation_history)
+        classification = self.classify_intent_and_entities(raw_message, conversation_history, user_scope=user_id or "default_user")
         intent = classification["intent"]
         matched_equipment_current = classification["detected_equipment"]
         is_historical_memory_query = classification["is_historical_memory_query"]
@@ -1512,6 +1551,7 @@ class ChatService:
                 query=query_for_retrieval,
                 mock_mode=mock_mode,
                 equipment_type=eq_type,
+                user_id=user_id,
             )
             retrieved_precedents_for_response = active_precedents
         elif is_followup:
@@ -1550,6 +1590,7 @@ class ChatService:
             matched_episode = self.find_matching_problem_episode(
                 equipment_name=eq_name_to_search,
                 text=raw_message,
+                user_scope=user_id or "default_user",
                 conversation_id=conv_id,
             )
 
@@ -1626,6 +1667,7 @@ class ChatService:
                 category=active_equipment.get("category", "general"),
                 symptoms=raw_message,
                 original_description=raw_message,
+                user_scope=user_id or "default_user",
             )
         elif intent == "PROBLEM_EXPLANATION_OR_CAUSE" and active_equipment:
             self.update_problem_episode_cause(
@@ -2344,8 +2386,8 @@ class ChatService:
             created_at=now_iso,
         )
 
-    def record_outcome(self, req: RecordOutcomeRequest) -> RecordOutcomeResponse:
-        """Record verified repair outcome into local SQLite database and optionally Hindsight Cloud with strict idempotency."""
+    def record_outcome(self, req: RecordOutcomeRequest, user_id: Optional[str] = None) -> RecordOutcomeResponse:
+        """Record verified repair outcome into local SQLite database and optionally Hindsight Cloud with strict idempotency and user scoping."""
         # 1. Idempotency Check: if idempotency_key is present and already exists, return existing record
         if req.idempotency_key:
             with get_db() as conn:
@@ -2379,17 +2421,18 @@ class ChatService:
         now_iso = datetime.now(timezone.utc).isoformat()
         doc_id = f"OUTCOME-{incident_id}"
 
-        # 2. Persist local incident first
+        # 2. Persist local incident first with user_id
         with get_db() as conn:
             conn.execute(
                 """
                 INSERT INTO incidents (
-                    id, machine_id, equipment_type, symptoms, timestamp,
+                    id, user_id, machine_id, equipment_type, symptoms, timestamp,
                     severity, reported_observations, status, is_demo, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     incident_id,
+                    user_id,
                     req.machine_id or "EQ-FIELD",
                     req.equipment_type,
                     req.symptoms,
@@ -2420,7 +2463,7 @@ class ChatService:
                 ),
             )
 
-        # 4. Handle Reliable Hindsight Cloud Synchronization State
+        # 4. Handle Reliable Hindsight Cloud Synchronization State with user isolation
         # States: 'local_only', 'pending_sync', 'synced', 'sync_failed'
         hindsight_retained = False
         sync_status = "local_only"
@@ -2453,6 +2496,7 @@ class ChatService:
                     incident=incident_dict,
                     repair=repair_dict,
                     verification=verification_dict,
+                    user_id=user_id,
                 )
                 success = True
                 if hasattr(ret_resp, "success"):
@@ -2477,18 +2521,19 @@ class ChatService:
             hindsight_retained = False
             sync_status = "local_only"
 
-        # 5. Insert into outcome_verifications with idempotency_key, sync_status, sync_error
+        # 5. Insert into outcome_verifications with user_id, idempotency_key, sync_status, sync_error
         with get_db() as conn:
             conn.execute(
                 """
                 INSERT INTO outcome_verifications (
-                    id, incident_id, verified_by, outcome_status, inspection_notes,
+                    id, user_id, incident_id, verified_by, outcome_status, inspection_notes,
                     follow_up_metrics, hindsight_retained, hindsight_document_id, verified_at,
                     idempotency_key, sync_status, sync_error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     verification_id,
+                    user_id,
                     incident_id,
                     req.technician_id or "TECH-FIELD",
                     req.outcome_status,
@@ -2504,20 +2549,24 @@ class ChatService:
             )
 
         # Resolve associated problem episode in SQLite for cross-conversation tracking
+        current_scope = user_id or "default_user"
         if req.episode_id:
             self.resolve_problem_episode(
                 episode_id=req.episode_id,
                 action_taken=req.action_taken,
+                user_scope=current_scope,
             )
         else:
             matched_ep = self.find_matching_problem_episode(
                 equipment_name=req.equipment_type,
                 text=f"{req.action_taken} {req.symptoms}",
+                user_scope=current_scope,
             )
             if matched_ep:
                 self.resolve_problem_episode(
                     episode_id=matched_ep["id"],
                     action_taken=req.action_taken,
+                    user_scope=current_scope,
                 )
 
         # 6. If conversation_id is provided, post a confirmation message into the conversation
@@ -2555,14 +2604,14 @@ class ChatService:
             is_duplicate=False,
         )
 
-    def retry_sync_outcome(self, verification_id: str) -> dict[str, Any]:
-        """Retry syncing a locally saved outcome to Hindsight Cloud without creating duplicate local rows."""
+    def retry_sync_outcome(self, verification_id: str, user_id: Optional[str] = None) -> dict[str, Any]:
+        """Retry syncing a locally saved outcome to Hindsight Cloud without creating duplicate local rows, enforcing user ownership."""
         with get_db() as conn:
             row = conn.execute(
                 """
-                SELECT v.id, v.incident_id, v.outcome_status, v.inspection_notes,
+                SELECT v.id, v.user_id as verification_user_id, v.incident_id, v.outcome_status, v.inspection_notes,
                        v.follow_up_metrics, v.hindsight_document_id, v.sync_status,
-                       i.machine_id, i.equipment_type, i.symptoms,
+                       i.user_id as incident_user_id, i.machine_id, i.equipment_type, i.symptoms, i.is_demo,
                        r.action_taken, r.parts_replaced, r.technician_id
                 FROM outcome_verifications v
                 JOIN incidents i ON v.incident_id = i.id
@@ -2575,6 +2624,13 @@ class ChatService:
 
         if not row:
             raise ValueError(f"Outcome verification '{verification_id}' not found.")
+
+        if user_id:
+            record_user = row["verification_user_id"] or row["incident_user_id"]
+            if record_user and record_user != user_id:
+                raise ValueError(f"Outcome verification '{verification_id}' not found.")
+            if record_user is None and not row["is_demo"] and user_id != "demo_user":
+                raise ValueError(f"Outcome verification '{verification_id}' not found.")
 
         if row["sync_status"] == "synced":
             return {
@@ -2617,6 +2673,7 @@ class ChatService:
                 incident=incident_dict,
                 repair=repair_dict,
                 verification=verification_dict,
+                user_id=user_id,
             )
             success = True
             if hasattr(ret_resp, "success"):

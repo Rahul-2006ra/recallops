@@ -6,6 +6,15 @@
 *.env
 !.env.example
 
+# Firebase & Secret Keys
+*service-account*.json
+*serviceAccount*.json
+firebase-credentials.json
+*.pem
+*.key
+credentials/
+secrets/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -42,8 +42,8 @@ def generate_id(prefix: str) -> str:
 
 
 class InvestigationService:
-    def create_incident(self, data: IncidentCreate) -> IncidentResponse:
-        """Register a new maintenance incident in SQLite."""
+    def create_incident(self, data: IncidentCreate, user_id: Optional[str] = None) -> IncidentResponse:
+        """Register a new maintenance incident in SQLite with user ownership."""
         incident_id = generate_incident_id()
         now_iso = datetime.now(timezone.utc).isoformat()
         incident_time = data.timestamp or now_iso
@@ -53,13 +53,14 @@ class InvestigationService:
             cursor.execute(
                 """
                 INSERT INTO incidents (
-                    id, machine_id, equipment_type, symptoms, timestamp,
+                    id, user_id, machine_id, equipment_type, symptoms, timestamp,
                     severity, reported_observations, status, is_demo,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident_id,
+                    user_id,
                     data.machine_id,
                     data.equipment_type,
                     data.symptoms,
@@ -73,16 +74,20 @@ class InvestigationService:
                 ),
             )
 
-        return self.get_incident_by_id(incident_id)
+        return self.get_incident_by_id(incident_id, user_id=user_id)
 
     def list_incidents(
         self,
         machine_id: Optional[str] = None,
         status: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> list[IncidentResponse]:
-        """List all maintenance incidents with optional filters."""
+        """List maintenance incidents filtered by authenticated user and optional filters."""
         query = "SELECT * FROM incidents WHERE 1=1"
         params = []
+        if user_id:
+            query += " AND user_id = ?"
+            params.append(user_id)
         if machine_id:
             query += " AND machine_id = ?"
             params.append(machine_id)
@@ -112,13 +117,21 @@ class InvestigationService:
                 for row in rows
             ]
 
-    def get_incident_by_id(self, incident_id: str) -> IncidentResponse:
+    def get_incident_by_id(self, incident_id: str, user_id: Optional[str] = None) -> IncidentResponse:
+        """Fetch incident verifying ownership by user_id."""
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,))
             row = cursor.fetchone()
             if not row:
                 raise ValueError(f"Incident with ID '{incident_id}' not found.")
+            if user_id:
+                row_uid = row["user_id"]
+                # Allow access if user_id matches, or if it's a demo record queried by demo_user
+                if row_uid and row_uid != user_id:
+                    raise ValueError(f"Incident with ID '{incident_id}' not found.")
+                if row_uid is None and not row["is_demo"] and user_id != "demo_user":
+                    raise ValueError(f"Incident with ID '{incident_id}' not found.")
             return IncidentResponse(
                 id=row["id"],
                 machine_id=row["machine_id"],
@@ -133,8 +146,8 @@ class InvestigationService:
                 updated_at=row["updated_at"],
             )
 
-    def get_incident_details(self, incident_id: str) -> IncidentDetailResponse:
-        incident = self.get_incident_by_id(incident_id)
+    def get_incident_details(self, incident_id: str, user_id: Optional[str] = None) -> IncidentDetailResponse:
+        incident = self.get_incident_by_id(incident_id, user_id=user_id)
         with get_db() as conn:
             cursor = conn.cursor()
 
@@ -210,14 +223,14 @@ class InvestigationService:
             verifications=verifications,
         )
 
-    def run_investigation(self, incident_id: str) -> InvestigationResponse:
-        """Perform cross-machine historical recall and AI reasoning for the incident."""
-        incident = self.get_incident_by_id(incident_id)
+    def run_investigation(self, incident_id: str, user_id: Optional[str] = None) -> InvestigationResponse:
+        """Perform cross-machine historical recall and AI reasoning for the incident with user isolation."""
+        incident = self.get_incident_by_id(incident_id, user_id=user_id)
 
         # 1. Cross-machine historical search in Hindsight
         recall_query = f"{incident.equipment_type} {incident.symptoms}"
         try:
-            historical_memories = hindsight_service.recall_memories(query=recall_query, budget="low")
+            historical_memories = hindsight_service.recall_memories(query=recall_query, budget="low", user_id=user_id)
         except MemoryServiceError:
             raise
         except Exception as e:
@@ -229,7 +242,7 @@ class InvestigationService:
             f"What previous repairs and root causes were verified for {incident.equipment_type} "
             f"with symptoms '{incident.symptoms}'? Which repairs succeeded and which failed?"
         )
-        reflect_summary = hindsight_service.reflect_on_incident(query=reflect_query, budget="low")
+        reflect_summary = hindsight_service.reflect_on_incident(query=reflect_query, budget="low", user_id=user_id)
 
         # 3. Groq strict structured reasoning
         incident_dict = incident.model_dump()
@@ -315,9 +328,9 @@ class InvestigationService:
             created_at=now_iso,
         )
 
-    def record_repair(self, incident_id: str, data: RepairCreate) -> RepairResponse:
-        """Record an executed technician repair action in SQLite."""
-        self.get_incident_by_id(incident_id)  # Validate existence
+    def record_repair(self, incident_id: str, data: RepairCreate, user_id: Optional[str] = None) -> RepairResponse:
+        """Record an executed technician repair action in SQLite with ownership validation."""
+        self.get_incident_by_id(incident_id, user_id=user_id)  # Validate existence & ownership
         repair_id = generate_id("REP")
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -354,9 +367,9 @@ class InvestigationService:
             performed_at=now_iso,
         )
 
-    def verify_outcome(self, incident_id: str, data: VerifyOutcomeCreate) -> VerifyOutcomeResponse:
-        """Verify the repair outcome and retain the completed experience into Hindsight Cloud."""
-        incident = self.get_incident_by_id(incident_id)
+    def verify_outcome(self, incident_id: str, data: VerifyOutcomeCreate, user_id: Optional[str] = None) -> VerifyOutcomeResponse:
+        """Verify the repair outcome and retain the completed experience into Hindsight Cloud with user isolation."""
+        incident = self.get_incident_by_id(incident_id, user_id=user_id)
 
         # 1. Require that a technician repair action was logged before outcome verification
         with get_db() as conn:
@@ -419,6 +432,7 @@ class InvestigationService:
                 incident=incident.model_dump(),
                 repair=repair_dict,
                 verification=verification_dict,
+                user_id=user_id,
             )
             success = True
             if hasattr(ret_resp, "success"):
@@ -438,13 +452,14 @@ class InvestigationService:
             cursor.execute(
                 """
                 INSERT INTO outcome_verifications (
-                    id, incident_id, verified_by, outcome_status,
+                    id, user_id, incident_id, verified_by, outcome_status,
                     inspection_notes, follow_up_metrics, hindsight_retained,
                     hindsight_document_id, verified_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     verification_id,
+                    user_id,
                     incident_id,
                     data.verified_by,
                     data.outcome_status,

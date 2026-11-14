@@ -2,11 +2,14 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from backend.main import app
+from backend.config import settings
 from backend.models.incident import IncidentCreate, RepairCreate, VerifyOutcomeCreate
 from backend.services.investigation_service import investigation_service
 from hindsight_client_api.exceptions import ApiException
 
+settings.TEST_AUTH_ENABLED = True
 client = TestClient(app)
+client.headers.update({"Authorization": "Bearer test-token:test_tech:tech@recallops.internal:Test Technician"})
 
 
 @pytest.fixture
@@ -20,7 +23,7 @@ def sample_incident():
         reported_observations="Vibration measured with handheld accelerometer. Casing warm to touch.",
         is_demo=True,
     )
-    inc = investigation_service.create_incident(data)
+    inc = investigation_service.create_incident(data, user_id="test_tech")
     return inc
 
 

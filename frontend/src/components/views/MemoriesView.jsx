@@ -17,8 +17,10 @@ import {
   Check,
 } from "lucide-react";
 import { searchMemories, checkHealth } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 export default function MemoriesView({ mockMemoryMode, showToast }) {
+  const { isAuthenticated } = useAuth();
   const [memories, setMemories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,6 +39,12 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
   }, []);
 
   const fetchMemories = useCallback(async () => {
+    if (!isAuthenticated) {
+      setMemories([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const data = await searchMemories({
@@ -53,7 +61,7 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, outcomeFilter, mockMemoryMode, showToast]);
+  }, [isAuthenticated, searchQuery, outcomeFilter, mockMemoryMode, showToast]);
 
   useEffect(() => {
     fetchMemories();
@@ -162,9 +170,13 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
               <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 text-slate-600 flex items-center justify-center mx-auto">
                 <Database className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-sm text-slate-200">No Memories Found</h3>
+              <h3 className="font-semibold text-sm text-slate-200">
+                {!isAuthenticated ? "Sign In to Access Memories" : "No Memories Found"}
+              </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                No verified records match your filter criteria. Troubleshooting sessions will automatically retain verified field outcomes here.
+                {!isAuthenticated
+                  ? "Sign in with Google or Email to query your private episodic memory bank and view verified industrial repairs."
+                  : "No verified records match your filter criteria. Troubleshooting sessions will automatically retain verified field outcomes here."}
               </p>
             </div>
           ) : (

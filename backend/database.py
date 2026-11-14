@@ -51,6 +51,7 @@ def init_db():
                 reported_observations TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'REPORTED',
                 is_demo INTEGER NOT NULL DEFAULT 0,
+                user_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -114,7 +115,7 @@ def init_db():
             """
         )
 
-        # Ensure outcome_verifications has idempotency and sync columns
+        # Ensure outcome_verifications has idempotency, sync, and user_id columns
         cursor.execute("PRAGMA foreign_keys = ON;")
         existing_cols = [row[1] for row in cursor.execute("PRAGMA table_info(outcome_verifications)").fetchall()]
         if "idempotency_key" not in existing_cols:
@@ -123,6 +124,13 @@ def init_db():
             cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN sync_status TEXT DEFAULT 'local_only';")
         if "sync_error" not in existing_cols:
             cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN sync_error TEXT;")
+        if "user_id" not in existing_cols:
+            cursor.execute("ALTER TABLE outcome_verifications ADD COLUMN user_id TEXT;")
+
+        # Ensure incidents has user_id column
+        inc_cols = [row[1] for row in cursor.execute("PRAGMA table_info(incidents)").fetchall()]
+        if "user_id" not in inc_cols:
+            cursor.execute("ALTER TABLE incidents ADD COLUMN user_id TEXT;")
 
         # Unique partial index enforcing strict idempotency for repair confirmation
         cursor.execute(
@@ -132,6 +140,8 @@ def init_db():
             WHERE idempotency_key IS NOT NULL;
             """
         )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_outcome_verifications_user ON outcome_verifications(user_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_incidents_user ON incidents(user_id);")
 
         # RecallOps 2.0 Conversational Tables
         cursor.execute(
@@ -139,11 +149,17 @@ def init_db():
             CREATE TABLE IF NOT EXISTS conversations (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
+                user_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             """
         )
+
+        conv_cols = [row[1] for row in cursor.execute("PRAGMA table_info(conversations)").fetchall()]
+        if "user_id" not in conv_cols:
+            cursor.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT;")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);")
 
         cursor.execute(
             """

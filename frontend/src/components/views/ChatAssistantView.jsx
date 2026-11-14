@@ -504,16 +504,21 @@ export default function ChatAssistantView({
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
       console.error("Chat message error:", err);
+      const isAuthError = err.status === 401;
       const errorMsg = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content:
-          "RecallOps experienced a temporary connectivity issue while processing your message. Your previous diagnosis remains saved in local storage. Please try again or rephrase your problem.",
+        content: isAuthError
+          ? "Authentication required. Please sign in with Google or Email using the 'Sign In' button at the top to chat with RecallOps and save your equipment memories."
+          : "RecallOps experienced a temporary connectivity issue while processing your message. Your previous diagnosis remains saved in local storage. Please try again or rephrase your problem.",
         metadata: {},
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
-      showToast?.("Failed to send message. Please retry.", "error");
+      showToast?.(
+        isAuthError ? "Please sign in to send messages." : "Failed to send message. Please retry.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }

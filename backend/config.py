@@ -37,6 +37,11 @@ class Settings:
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./recallops.db")
 
+    # Firebase Authentication
+    FIREBASE_PROJECT_ID: str = os.getenv("FIREBASE_PROJECT_ID", "recallops-181ad").strip()
+    FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")).strip()
+    TEST_AUTH_ENABLED: bool = os.getenv("TEST_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
+
     @property
     def sqlite_db_path(self) -> str:
         """Extract filesystem path from DATABASE_URL."""

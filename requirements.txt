@@ -5,6 +5,7 @@ pydantic>=2.9.0
 pydantic-settings>=2.5.0
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
+firebase-admin>=6.5.0
 
 
 # AI / LLM & HTTP Client

@@ -10,18 +10,26 @@ import {
   Bot,
 } from "lucide-react";
 import { listConversations, deleteConversation } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ConversationsHistoryView({
   onSelectConversation,
   onNewChat,
   showToast,
 }) {
+  const { isAuthenticated } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
   const fetchConversations = async () => {
+    if (!isAuthenticated) {
+      setConversations([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const data = await listConversations();
@@ -36,7 +44,7 @@ export default function ConversationsHistoryView({
 
   useEffect(() => {
     fetchConversations();
-  }, []);
+  }, [isAuthenticated]);
 
   const handleDelete = async (e, convId) => {
     e.stopPropagation();
@@ -131,19 +139,25 @@ export default function ConversationsHistoryView({
                 <Bot className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-semibold text-sm text-slate-200">No Past Conversations</h3>
+                <h3 className="font-semibold text-sm text-slate-200">
+                  {!isAuthenticated ? "Sign In to View History" : "No Past Conversations"}
+                </h3>
                 <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Ask a question in the AI Assistant to start your first conversational troubleshooting session.
+                  {!isAuthenticated
+                    ? "Sign in with Google or Email to view, resume, and manage your past troubleshooting sessions."
+                    : "Ask a question in the AI Assistant to start your first conversational troubleshooting session."}
                 </p>
               </div>
-              <button
-                onClick={onNewChat}
-                aria-label="Start troubleshooting"
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition inline-flex items-center gap-1.5 shadow-sm shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Start Troubleshooting</span>
-              </button>
+              {isAuthenticated && (
+                <button
+                  onClick={onNewChat}
+                  aria-label="Start troubleshooting"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition inline-flex items-center gap-1.5 shadow-sm shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-500/70 focus-visible:outline-none"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Start Troubleshooting</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
