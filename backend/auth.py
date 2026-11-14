@@ -101,11 +101,25 @@ def verify_firebase_token(id_token: str) -> AuthenticatedUser:
         name = parts[3] if len(parts) > 3 else f"Test User {uid}"
         return AuthenticatedUser(uid=uid, email=email, name=name)
 
-    # Real Firebase Admin verification
+    # Real Firebase Admin verification with public Google RS256 certificate fallback
     try:
         init_firebase_admin()
-        decoded_token = auth.verify_id_token(id_token, check_revoked=False)
-        uid = decoded_token.get("uid")
+        decoded_token = None
+        try:
+            decoded_token = auth.verify_id_token(id_token, check_revoked=False)
+            uid = decoded_token.get("uid")
+        except Exception as e_admin:
+            logger.info("Firebase Admin direct check note (%s); using Google public RS256 token verification.", e_admin)
+            from google.oauth2 import id_token as google_id_token
+            from google.auth.transport import requests as google_requests
+            adapter = google_requests.Request()
+            decoded_token = google_id_token.verify_firebase_token(
+                id_token,
+                adapter,
+                audience=settings.FIREBASE_PROJECT_ID,
+            )
+            uid = decoded_token.get("sub") or decoded_token.get("user_id") or decoded_token.get("uid")
+
         if not uid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
