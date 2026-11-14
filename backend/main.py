@@ -1,3 +1,10 @@
+# Enable native operating system certificate verification
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware

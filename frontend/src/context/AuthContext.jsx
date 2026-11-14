@@ -21,6 +21,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Configure API client token provider
     setAuthTokenProvider(async () => {
+      if (typeof auth.authStateReady === "function") {
+        try {
+          await auth.authStateReady();
+        } catch (_) {}
+      }
       const currentUser = auth.currentUser;
       if (currentUser) {
         return currentUser.getIdToken();

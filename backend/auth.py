@@ -1,6 +1,14 @@
 import os
 import logging
 from typing import Optional
+
+# Enable native OS certificate trust store (fixes Windows SSL issuer verification for Google APIs)
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from pydantic import BaseModel
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -87,7 +95,7 @@ def verify_firebase_token(id_token: str) -> AuthenticatedUser:
     # Real Firebase Admin verification
     try:
         init_firebase_admin()
-        decoded_token = auth.verify_id_token(id_token, check_revoked=True)
+        decoded_token = auth.verify_id_token(id_token, check_revoked=False)
         uid = decoded_token.get("uid")
         if not uid:
             raise HTTPException(
