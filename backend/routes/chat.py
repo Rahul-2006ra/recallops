@@ -110,15 +110,17 @@ def list_memories(
     q: Optional[str] = Query("", description="Search keywords"),
     equipment_type: Optional[str] = Query(None, description="Filter by equipment type"),
     outcome_status: Optional[str] = Query(None, description="Filter by outcome: SUCCESSFUL or UNSUCCESSFUL"),
+    mock_memory: Optional[bool] = Query(None, description="Filter by mock memory mode"),
     limit: int = Query(25, ge=1, le=100),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Search verified past equipment repairs and certified outcomes belonging to the authenticated user."""
     try:
-        items = chat_service.search_local_memories(
+        items = chat_service.get_memories(
             query=q or "",
             equipment_type=equipment_type,
             outcome_status=outcome_status,
+            mock_memory=mock_memory,
             limit=limit,
             user_id=current_user.uid,
         )

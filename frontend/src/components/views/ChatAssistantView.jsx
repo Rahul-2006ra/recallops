@@ -548,17 +548,23 @@ export default function ChatAssistantView({
         conversation_id: activeConversationId || undefined,
         message_id: msgId,
         mock_memory: mockMemoryMode,
+        live_retain: !mockMemoryMode,
       };
 
       const result = await recordOutcome(payload);
 
-      let statusMsg = "Saved to Local Memory (SQLite)";
-      if (result.sync_status === "synced") {
-        statusMsg = "Saved & Synced to Hindsight Cloud";
+      let statusMsg = "Saved to Local Memory (Demo Mode)";
+      if (result.sync_status === "synced" || result.hindsight_retained) {
+        statusMsg = "Saved & Retained in Hindsight Cloud";
+        showToast?.("Verified outcome retained in Hindsight Cloud memory bank!", "success");
       } else if (result.sync_status === "sync_failed") {
-        statusMsg = "Saved to Local (Cloud Sync Pending)";
+        statusMsg = "Saved Locally (Hindsight Cloud Sync Failed)";
+        showToast?.("Saved to local database. Cloud sync pending or unreachable.", "warning");
       } else if (result.is_duplicate) {
         statusMsg = "Saved to Local Memory (Cached Record)";
+        showToast?.("Outcome already recorded in memory bank.", "info");
+      } else {
+        showToast?.("Verified outcome saved to local plant memory (Demo Mode).", "info");
       }
 
       setSavedOutcomes((prev) => ({
@@ -869,20 +875,29 @@ export default function ChatAssistantView({
                                     </span>
                                   </div>
 
-                                  <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
-                                      isSuccess
-                                        ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/60"
-                                        : "bg-amber-950/60 text-amber-300 border border-amber-800/60"
-                                    }`}
-                                  >
-                                    {isSuccess ? (
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-amber-400" />
-                                    )}
-                                    {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
-                                  </span>
+                                  {(() => {
+                                    const isFailed = p.outcome_status === "UNSUCCESSFUL";
+                                    return (
+                                      <span
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                          isSuccess
+                                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/60"
+                                            : isFailed
+                                            ? "bg-amber-950/60 text-amber-300 border border-amber-800/60"
+                                            : "bg-slate-900 text-slate-400 border border-slate-800"
+                                        }`}
+                                      >
+                                        {isSuccess ? (
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                        ) : isFailed ? (
+                                          <XCircle className="w-3 h-3 text-amber-400" />
+                                        ) : (
+                                          <Clock className="w-3 h-3 text-slate-400" />
+                                        )}
+                                        {isSuccess ? "VERIFIED SUCCESS" : isFailed ? "FAILED ATTEMPT" : "HISTORICAL RECORD"}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
 
                                 {/* 2. Relevant Historical Symptoms */}

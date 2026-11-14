@@ -45,6 +45,15 @@ def init_firebase_admin():
     if firebase_admin._apps:
         return
     try:
+        # Check if raw service account JSON string is provided via environment variable
+        raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON") or os.environ.get("FIREBASE_CREDENTIALS_JSON")
+        if raw_json and raw_json.strip().startswith("{"):
+            import json
+            logger.info("Initializing Firebase Admin with inline service account JSON")
+            cred = credentials.Certificate(json.loads(raw_json.strip()))
+            firebase_admin.initialize_app(cred)
+            return
+
         # Potential candidate locations for Firebase service account certificate
         candidate_paths = [
             settings.FIREBASE_CREDENTIALS_PATH,

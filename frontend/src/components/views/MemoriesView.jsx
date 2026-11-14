@@ -183,6 +183,7 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {memories.map((mem) => {
                 const isSuccess = mem.outcome_status === "SUCCESSFUL";
+                const isCloud = mem.hindsight_retained || mem.sync_status === "synced" || mem.storage_engine === "hindsight_cloud";
                 const isDemo = mockMemoryMode || mem.machine_id?.startsWith("DEMO") || mem.is_demo;
 
                 return (
@@ -212,20 +213,43 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
                           <span className="text-[11px] text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-800 border border-slate-750">
                             {mem.equipment_type}
                           </span>
+                          {isCloud ? (
+                            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>Hindsight Cloud</span>
+                            </span>
+                          ) : mem.sync_status === "sync_failed" ? (
+                            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/80 flex items-center gap-1">
+                              <span>Sync Pending</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60 flex items-center gap-1">
+                              <Database className="w-2.5 h-2.5 text-slate-400" />
+                              <span>Local SQLite</span>
+                            </span>
+                          )}
                         </div>
                         <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex items-center gap-1 ${
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex items-center gap-1 shrink-0 ${
                             isSuccess
                               ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/80"
-                              : "bg-rose-950/80 text-rose-400 border border-rose-800/80"
+                              : mem.outcome_status === "UNSUCCESSFUL"
+                              ? "bg-rose-950/80 text-rose-400 border border-rose-800/80"
+                              : "bg-slate-800 text-slate-300 border border-slate-750"
                           }`}
                         >
                           {isSuccess ? (
                             <CheckCircle2 className="w-3 h-3" />
-                          ) : (
+                          ) : mem.outcome_status === "UNSUCCESSFUL" ? (
                             <XCircle className="w-3 h-3" />
+                          ) : (
+                            <Clock className="w-3 h-3 text-slate-400" />
                           )}
-                          {isSuccess ? "VERIFIED SUCCESS" : "FAILED ATTEMPT"}
+                          {isSuccess
+                            ? "VERIFIED SUCCESS"
+                            : mem.outcome_status === "UNSUCCESSFUL"
+                            ? "FAILED ATTEMPT"
+                            : "UNVERIFIED RECORD"}
                         </span>
                       </div>
 
@@ -247,8 +271,8 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
                     <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                       <div className="flex items-center gap-2">
                         <span>{mem.verified_at ? `Recorded ${mem.verified_at.slice(0, 10)}` : "Recorded in plant history"}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400">
-                          {isDemo ? "Sample Record" : "Plant Audit"}
+                        <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">
+                          {isCloud ? "Cloud Bank: recallops-demo" : isDemo ? "Sample Record" : "Plant Audit"}
                         </span>
                       </div>
                       <span className="flex items-center gap-1 group-hover:text-emerald-400 transition">
@@ -319,6 +343,34 @@ export default function MemoriesView({ mockMemoryMode, showToast }) {
               <div className="flex justify-between py-1 border-b border-slate-800/60">
                 <span className="text-slate-500">Verification Date:</span>
                 <span className="font-mono text-slate-300">{selectedMemory.verified_at || "Recorded in plant log"}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-500">Storage Engine:</span>
+                <span className="font-mono text-xs flex items-center gap-1.5">
+                  {selectedMemory.hindsight_retained || selectedMemory.sync_status === "synced" || selectedMemory.storage_engine === "hindsight_cloud" ? (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      Hindsight Cloud (recallops-demo)
+                    </span>
+                  ) : (
+                    <span className="text-slate-300 flex items-center gap-1">
+                      <Database className="w-3.5 h-3.5 text-slate-400" />
+                      Local SQLite Database
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-500">Sync Status:</span>
+                <span className={`font-mono text-xs font-semibold ${
+                  selectedMemory.sync_status === "synced"
+                    ? "text-emerald-400"
+                    : selectedMemory.sync_status === "sync_failed"
+                    ? "text-amber-400"
+                    : "text-slate-400"
+                }`}>
+                  {selectedMemory.sync_status ? selectedMemory.sync_status.toUpperCase() : "LOCAL_ONLY"}
+                </span>
               </div>
               {selectedMemory.hindsight_document_id && (
                 <div className="flex justify-between py-1">

@@ -71,7 +71,21 @@ export default function App() {
     } catch (_) {}
   }, [activeConversationId]);
 
-  const [mockMemoryMode, setMockMemoryMode] = useState(true); // Default ON to preserve $5 hackathon balance
+  const [mockMemoryMode, setMockMemoryMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem("recallops_mock_mode");
+      if (saved !== null) {
+        return saved === "true";
+      }
+    } catch (_) {}
+    return false; // Default to Live Hindsight Cloud mode so live memories and retention work out of the box
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("recallops_mock_mode", String(mockMemoryMode));
+    } catch (_) {}
+  }, [mockMemoryMode]);
 
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);

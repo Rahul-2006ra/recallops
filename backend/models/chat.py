@@ -74,9 +74,15 @@ class RecordOutcomeRequest(BaseModel):
     follow_up_metrics: Optional[dict[str, Any]] = None
     conversation_id: Optional[str] = None
     live_retain: Optional[bool] = False
+    mock_memory: Optional[bool] = None
     idempotency_key: Optional[str] = None
     episode_id: Optional[str] = None
     verification_source: Optional[str] = None
+
+    def model_post_init(self, __context):
+        # Synchronize mock_memory and live_retain
+        if self.mock_memory is not None and not self.live_retain:
+            self.live_retain = not self.mock_memory
 
 
 class RecordOutcomeResponse(BaseModel):
@@ -88,6 +94,7 @@ class RecordOutcomeResponse(BaseModel):
     message: str
     document_id: Optional[str] = None
     is_duplicate: bool = False
+    sync_error: Optional[str] = None
 
 
 class MemoryItemResponse(BaseModel):
@@ -105,6 +112,7 @@ class MemoryItemResponse(BaseModel):
     hindsight_retained: bool
     hindsight_document_id: Optional[str] = None
     sync_status: Optional[str] = "local_only"
+    storage_engine: Optional[str] = "local_sqlite"
 
 
 class MemoryListResponse(BaseModel):

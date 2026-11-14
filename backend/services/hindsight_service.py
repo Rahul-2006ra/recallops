@@ -178,15 +178,19 @@ class HindsightService:
                         )
 
                         results.append({
+                            "id": getattr(item, "id", None),
                             "text": getattr(item, "text", str(item)),
                             "score": score_val,
                             "timestamp": str(ts_val) if ts_val else "",
                             "document_id": getattr(item, "document_id", None),
                             "tags": item_tags,
+                            "entities": getattr(item, "entities", None) or [],
+                            "context": getattr(item, "context", None),
                             "metadata": getattr(item, "metadata", None),
+                            "chunk_id": getattr(item, "chunk_id", None),
                         })
 
-                if results or bank_id == target_bank:
+                if results:
                     logger.info("Hindsight recall returned %d isolated memory items from bank '%s'.", len(results), bank_id)
                     return results
 
@@ -258,6 +262,8 @@ class HindsightService:
             f"outcome-{verification.get('outcome_status', '').lower()}",
             "maintenance-history",
             user_tag,
+            f"incident-{incident['id'].lower()}",
+            f"doc-{document_id.lower()}",
         ]
 
         target_bank = self.get_user_bank_id(user_id) if user_id else settings.HINDSIGHT_BANK_ID

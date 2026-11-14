@@ -21,6 +21,15 @@ from backend.models.chat import (
 )
 from backend.services.groq_service import groq_service
 from backend.services.hindsight_service import hindsight_service
+from backend.services.hindsight_parser import (
+    group_cloud_memory_fragments,
+    extract_machine_id,
+    extract_equipment_type,
+    extract_repair_action,
+    extract_symptoms,
+    extract_outcome_status,
+    extract_inspection_notes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1209,6 +1218,7 @@ class ChatService:
                     hindsight_retained=bool(r["hindsight_retained"]),
                     hindsight_document_id=r["hindsight_document_id"],
                     sync_status=r["sync_status"] or "local_only",
+                    storage_engine="hindsight_cloud" if bool(r["hindsight_retained"]) else "local_sqlite",
                 )
             )
         return results
@@ -1256,7 +1266,93 @@ class ChatService:
                 hindsight_retained=bool(r["hindsight_retained"]),
                 hindsight_document_id=r["hindsight_document_id"],
                 sync_status=r["sync_status"] or "local_only",
+                storage_engine="hindsight_cloud" if bool(r["hindsight_retained"]) else "local_sqlite",
             )
+
+    def get_memories(
+        self,
+        query: str = "",
+        equipment_type: Optional[str] = None,
+        outcome_status: Optional[str] = None,
+        mock_memory: Optional[bool] = None,
+        limit: int = 25,
+        user_id: Optional[str] = None,
+    ) -> list[MemoryItemResponse]:
+        """Fetch verified memories for the authenticated user, blending local SQLite records and live Hindsight Cloud memories when in live mode."""
+        # 1. Fetch local SQLite memories
+        local_items = self.search_local_memories(
+            query=query,
+            equipment_type=equipment_type,
+            outcome_status=outcome_status,
+            limit=limit,
+            user_id=user_id,
+        )
+
+        # Determine whether live Hindsight Cloud query is active
+        is_live = False
+        if mock_memory is False:
+            is_live = True
+        elif mock_memory is None and not settings.HINDSIGHT_MOCK_MODE:
+            is_live = True
+
+        if not is_live or not settings.HINDSIGHT_API_KEY:
+            return local_items
+
+        # 2. Query Hindsight Cloud with user isolation
+        cloud_items: list[MemoryItemResponse] = []
+        try:
+            recall_q = query.strip() or (f"{equipment_type} verified repair maintenance" if equipment_type else "verified industrial equipment repair maintenance outcome")
+            recalled = hindsight_service.recall_memories(
+                query=recall_q,
+                budget="low",
+                max_tokens=2048,
+                user_id=user_id,
+            )
+
+            # Synthesize and group cloud memory fragments into coherent incident records
+            grouped_cloud_memories = group_cloud_memory_fragments(
+                raw_fragments=recalled,
+                query=query,
+                equipment_type_filter=equipment_type,
+                outcome_status_filter=outcome_status,
+            )
+
+            for cloud_mem in grouped_cloud_memories:
+                matched_local = False
+                for loc in local_items:
+                    # Match by explicit document ID or incident ID
+                    doc_match = bool(loc.hindsight_document_id and loc.hindsight_document_id == cloud_mem.hindsight_document_id)
+                    inc_match = bool(loc.incident_id and (loc.incident_id == cloud_mem.incident_id or loc.incident_id in (cloud_mem.hindsight_document_id or "")))
+
+                    # Match by machine and action signature (preserving distinct trials on same machine)
+                    mach_match = False
+                    if loc.machine_id and cloud_mem.machine_id:
+                        if loc.machine_id.strip().upper() == cloud_mem.machine_id.strip().upper():
+                            if (loc.outcome_status or "").upper() == (cloud_mem.outcome_status or "").upper():
+                                loc_tokens = {w for w in re.findall(r"\w+", (loc.action_taken or "").lower()) if len(w) > 3}
+                                cld_tokens = {w for w in re.findall(r"\w+", (cloud_mem.action_taken or "").lower()) if len(w) > 3}
+                                overlap = loc_tokens.intersection(cld_tokens)
+                                if overlap or not loc_tokens or not cld_tokens:
+                                    mach_match = True
+
+                    if doc_match or inc_match or mach_match:
+                        loc.sync_status = "synced"
+                        loc.hindsight_retained = True
+                        loc.storage_engine = "hindsight_cloud"
+                        if not loc.hindsight_document_id:
+                            loc.hindsight_document_id = cloud_mem.hindsight_document_id
+                        matched_local = True
+                        break
+
+                if not matched_local:
+                    cloud_items.append(cloud_mem)
+
+        except Exception as e:
+            logger.warning("Failed to recall live memories from Hindsight Cloud: %s. Falling back to local.", e)
+
+        combined = local_items + cloud_items
+        combined.sort(key=lambda x: x.verified_at or "", reverse=True)
+        return combined[:limit]
 
     def retrieve_precedents(
         self,
@@ -1268,61 +1364,71 @@ class ChatService:
         """Retrieve historical precedents with multi-symptom relevance ranking and outcome diversity under user isolation."""
         precedents: list[PrecedentRecord] = []
 
-        # LIVE HINDSIGHT RECALL: only if mock_mode is explicitly False AND config permits
-        if not mock_mode and not settings.HINDSIGHT_MOCK_MODE:
+        # LIVE HINDSIGHT RECALL: only if mock_mode is explicitly False AND API key is present
+        if not mock_mode and settings.HINDSIGHT_API_KEY:
             try:
                 logger.info("Executing deliberate live Hindsight recall for: '%s' (user=%s)", query, user_id)
                 recalled = hindsight_service.recall_memories(query=query, budget="low", max_tokens=1024, user_id=user_id)
-                for item in recalled:
-                    text = item.get("text", "")
-                    doc_id = item.get("document_id") or "HINDSIGHT-DOC"
 
-                    # 1. Parse structured fields from retained document if present
-                    m_mid = re.search(r'Machine ID:\s*([^\n]+)', text, re.IGNORECASE)
-                    parsed_machine_id = m_mid.group(1).strip() if m_mid else doc_id.replace("OUTCOME-", "").replace("HACKATHON-VERIFIED-", "")
+                # 1. Synthesize and group cloud memory fragments into distinct incident records
+                # Strictly pass query="" so the user's prompt is never used as fallback for historical symptoms
+                grouped_cloud_memories = group_cloud_memory_fragments(
+                    raw_fragments=recalled,
+                    query="",
+                    equipment_type_filter=None,
+                )
 
-                    m_eq = re.search(r'Equipment Type:\s*([^\n]+)', text, re.IGNORECASE)
-                    parsed_eq = m_eq.group(1).strip() if m_eq else (equipment_type or "Industrial Equipment")
-
-                    # 2. Strict Cross-Equipment Isolation Check
-                    # Disallow pump records leaking into laptops, ovens, or mismatched equipment
-                    if equipment_type and parsed_eq:
+                # 2. Strict Cross-Equipment Isolation Check
+                filtered_memories: list[MemoryItemResponse] = []
+                for mem in grouped_cloud_memories:
+                    if equipment_type and mem.equipment_type:
                         eq_tokens = [t for t in re.split(r'\W+', equipment_type.lower()) if len(t) >= 4]
-                        mem_tokens = [t for t in re.split(r'\W+', parsed_eq.lower()) if len(t) >= 4]
+                        mem_tokens = [t for t in re.split(r'\W+', mem.equipment_type.lower()) if len(t) >= 4]
                         if eq_tokens and mem_tokens and not any(t in mem_tokens for t in eq_tokens) and not any(t in eq_tokens for t in mem_tokens):
-                            logger.info("Prevented cross-equipment contamination: dropped memory for '%s' during '%s' query", parsed_eq, equipment_type)
+                            logger.info("Prevented cross-equipment contamination: dropped memory for '%s' during '%s' query", mem.equipment_type, equipment_type)
                             continue
+                    filtered_memories.append(mem)
 
-                    m_act = re.search(r'Repair Action:\s*([^\n]+)', text, re.IGNORECASE)
-                    parsed_action = m_act.group(1).strip() if m_act else "Verified repair action from Hindsight Cloud"
+                # 3. Outcome Diversity Selection: prioritize top SUCCESSFUL + top UNSUCCESSFUL attempt
+                succ_matches = [r for r in filtered_memories if r.outcome_status == "SUCCESSFUL"]
+                unsucc_matches = [r for r in filtered_memories if r.outcome_status == "UNSUCCESSFUL"]
+                other_matches = [r for r in filtered_memories if r.outcome_status not in ("SUCCESSFUL", "UNSUCCESSFUL")]
 
-                    m_sym = re.search(r'Reported Symptoms:\s*([^\n]+)', text, re.IGNORECASE)
-                    parsed_symptoms = m_sym.group(1).strip() if m_sym else query
+                selected_cld: list[MemoryItemResponse] = []
+                if succ_matches:
+                    selected_cld.append(succ_matches[0])
+                if unsucc_matches and len(selected_cld) < 2:
+                    selected_cld.append(unsucc_matches[0])
+                elif len(succ_matches) > 1 and len(selected_cld) < 2:
+                    selected_cld.append(succ_matches[1])
+                elif other_matches and len(selected_cld) < 2:
+                    selected_cld.append(other_matches[0])
 
-                    m_out = re.search(r'Verified Outcome:\s*([^\n]+)', text, re.IGNORECASE)
-                    if m_out:
-                        raw_o = m_out.group(1).strip().upper()
-                        outcome_status = "UNSUCCESSFUL" if "UNSUCCESSFUL" in raw_o else "SUCCESSFUL"
+                for item in selected_cld:
+                    doc_id = item.hindsight_document_id or item.incident_id or item.id
+                    outcome_status = item.outcome_status
+                    if outcome_status not in ("SUCCESSFUL", "UNSUCCESSFUL"):
+                        outcome_status = "UNRESOLVED"
+                        verif_status = "USER_REPORTED"
+                        source_label = "Hindsight Cloud (Historical Record)"
                     else:
-                        outcome_status = "UNSUCCESSFUL" if "UNSUCCESSFUL" in text.upper() else "SUCCESSFUL"
-
-                    m_notes = re.search(r'Inspection Notes:\s*([^\n]+)', text, re.IGNORECASE)
-                    parsed_notes = m_notes.group(1).strip() if m_notes else text[:250]
+                        verif_status = "TECHNICIAN_CONFIRMED"
+                        source_label = "Hindsight Cloud (Live Verified)"
 
                     precedents.append(
                         PrecedentRecord(
                             id=doc_id,
-                            machine_id=parsed_machine_id,
-                            equipment_type=parsed_eq,
-                            symptoms=parsed_symptoms,
-                            action_taken=parsed_action,
+                            machine_id=item.machine_id,
+                            equipment_type=item.equipment_type,
+                            symptoms=item.symptoms,
+                            action_taken=item.action_taken,
                             outcome_status=outcome_status,
-                            verification_status="TECHNICIAN_CONFIRMED",
-                            inspection_notes=parsed_notes,
-                            verified_at=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            verification_status=verif_status,
+                            inspection_notes=item.inspection_notes,
+                            verified_at=item.verified_at[:10] if item.verified_at else datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                             relevance_reason="Live semantic recall from Hindsight Cloud long-term memory bank.",
                             source="hindsight_cloud_live",
-                            source_label="Hindsight Cloud (Live Verified)",
+                            source_label=source_label,
                         )
                     )
                 if precedents:
@@ -2467,9 +2573,11 @@ class ChatService:
         # States: 'local_only', 'pending_sync', 'synced', 'sync_failed'
         hindsight_retained = False
         sync_status = "local_only"
-        sync_error = None
+        sync_error: Optional[str] = None
+        # Determine whether live Hindsight Cloud retention was requested
+        should_live_retain = req.live_retain if req.live_retain is not None else (not req.mock_memory if req.mock_memory is not None else False)
 
-        if req.live_retain and not settings.HINDSIGHT_MOCK_MODE:
+        if should_live_retain and settings.HINDSIGHT_API_KEY:
             sync_status = "pending_sync"
             try:
                 incident_dict = {
@@ -2602,6 +2710,7 @@ class ChatService:
             message="Repair outcome recorded into episodic memory bank successfully.",
             document_id=doc_id,
             is_duplicate=False,
+            sync_error=sync_error,
         )
 
     def retry_sync_outcome(self, verification_id: str, user_id: Optional[str] = None) -> dict[str, Any]:
@@ -2640,7 +2749,7 @@ class ChatService:
                 "document_id": row["hindsight_document_id"],
             }
 
-        if settings.HINDSIGHT_MOCK_MODE:
+        if not settings.HINDSIGHT_API_KEY:
             return {
                 "success": True,
                 "sync_status": "local_only",

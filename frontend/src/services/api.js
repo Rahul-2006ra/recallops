@@ -195,6 +195,9 @@ export async function listMemories(params = {}) {
   if (params.equipment_type) query.append("equipment_type", params.equipment_type);
   if (params.outcome_status) query.append("outcome_status", params.outcome_status);
   if (params.limit) query.append("limit", params.limit);
+  if (params.mock_memory !== undefined && params.mock_memory !== null) {
+    query.append("mock_memory", String(params.mock_memory));
+  }
   const url = `${API_BASE}/api/memories${query.toString() ? `?${query.toString()}` : ""}`;
   const res = await authFetch(url);
   return handleResponse(res);
