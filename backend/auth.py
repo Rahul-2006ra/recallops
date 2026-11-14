@@ -37,12 +37,22 @@ def init_firebase_admin():
     if firebase_admin._apps:
         return
     try:
-        cred_path = settings.FIREBASE_CREDENTIALS_PATH
-        default_cred_path = os.path.join(os.getcwd(), "credentials", "service-account.json")
-        if not cred_path and os.path.exists(default_cred_path):
-            cred_path = default_cred_path
+        # Potential candidate locations for Firebase service account certificate
+        candidate_paths = [
+            settings.FIREBASE_CREDENTIALS_PATH,
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"),
+            os.path.expanduser("~/.credentials/recallops-service-account.json"),
+            os.path.join(os.getcwd(), "credentials", "service-account.json"),
+            os.path.join(os.getcwd(), "credentials", "service-account.json.json"),
+        ]
 
-        if cred_path and os.path.exists(cred_path):
+        cred_path = None
+        for p in candidate_paths:
+            if p and os.path.exists(p):
+                cred_path = p
+                break
+
+        if cred_path:
             logger.info("Initializing Firebase Admin with service account certificate at: %s", cred_path)
             cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
